@@ -1,0 +1,140 @@
+<resources>
+    <string name="app_name">Lilith MV</string>
+
+    <!-- Navigasi Utama -->
+    <string name="nav_music">Musik</string>
+    <string name="nav_video">Video</string>
+    <string name="nav_settings">Pengaturan</string>
+
+    <!-- Tab Musik -->
+    <string name="tab_songs">Lagu</string>
+    <string name="tab_albums">Album</string>
+    <string name="tab_artists">Artis</string>
+    <string name="tab_folders">Folder</string>
+    <string name="tab_playlists">Playlist</string>
+
+    <!-- Pencarian & Filter -->
+    <string name="search_placeholder">Cari…</string>
+    <string name="no_media_found">Tidak ada media ditemukan</string>
+    <string name="scan_library">Pindai Ulang Pustaka</string>
+    <string name="open_saf_file">Buka Berkas…</string>
+    <string name="open_saf_folder">Buka Folder…</string>
+
+    <!-- Pemutar Musik & Antrean -->
+    <string name="now_playing">Sedang Memutar</string>
+    <string name="queue_title">Antrean Putar</string>
+    <string name="queue_empty">Antrean kosong</string>
+    <string name="add_to_queue">Tambah ke Antrean</string>
+    <string name="clear_queue">Kosongkan Antrean</string>
+    <string name="play_next">Putar Berikutnya</string>
+    <string name="unknown_artist">Artis Tidak Dikenal</string>
+    <string name="unknown_album">Album Tidak Dikenal</string>
+    <string name="unknown_title">Judul Tidak Diketahui</string>
+    <string name="format_lossy">LOSSY</string>
+    <string name="format_lossless">LOSSLESS</string>
+
+    <!-- Kontrol Putar -->
+    <string name="control_play">Putar</string>
+    <string name="control_pause">Jeda</string>
+    <string name="control_previous">Sebelumnya</string>
+    <string name="control_next">Berikutnya</string>
+    <string name="repeat_mode_off">Ulang: Mati</string>
+    <string name="repeat_mode_one">Ulang: Satu Lagu</string>
+    <string name="repeat_mode_all">Ulang: Semua</string>
+    <string name="shuffle_on">Acak Aktif</string>
+    <string name="shuffle_off">Acak Nonaktif</string>
+    <string name="playback_speed">Kecepatan Putar</string>
+    <string name="sleep_timer">Pengatur Waktu Tidur</string>
+    <string name="sleep_timer_off">Mati</string>
+    <string name="sleep_timer_minutes">%1$d Menit</string>
+    <string name="sleep_timer_set">Timer tidur diatur untuk %1$d menit</string>
+
+    <!-- Ekualiser -->
+    <string name="equalizer_title">Ekualiser Audio</string>
+    <string name="equalizer_enable">Aktifkan Ekualiser</string>
+    <string name="equalizer_preset">Preset Audio</string>
+    <string name="equalizer_bass_boost">Penguat Bass</string>
+    <string name="equalizer_not_supported">Ekualiser tidak didukung pada perangkat ini</string>
+
+    <!-- Playlist -->
+    <string name="playlist_create">Buat Playlist Baru</string>
+    <string name="playlist_name_hint">Nama Playlist</string>
+    <string name="playlist_save">Simpan</string>
+    <string name="playlist_cancel">Batal</string>
+    <string name="playlist_delete">Hapus Playlist</string>
+    <string name="playlist_add_success">Lagu berhasil ditambahkan ke playlist</string>
+    <string name="playlist_remove_song">Hapus dari Playlist</string>
+    <string name="playlist_song_removed">Dihapus dari playlist</string>
+    <string name="undo">Urungkan</string>
+    <string name="playlist_empty">Playlist kosong</string>
+
+    <!-- Hapus Berkas Permanen -->
+    <string name="delete_permanently">Hapus Permanen</string>
+    <string name="delete_permanent_title">Hapus lagu secara permanen?</string>
+    <string name="delete_permanent_message">Berkas \"%1$s\" akan dihapus secara permanen dari penyimpanan perangkat. Tindakan ini tidak dapat dibatalkan dan berbeda dari sekadar menghapus lagu dari playlist.</string>
+    <string name="delete_permanent_confirm">Hapus</string>
+    <string name="delete_permanent_cancel">Batal</string>
+    <string name="song_deleted">Lagu dihapus</string>
+    <string name="delete_failed">Gagal menghapus lagu</string>
+    <string name="storage_permission_required">Izin penyimpanan diperlukan untuk menghapus berkas</string>
+
+    <!-- Pemutar Video -->
+    <string name="video_title">Pemutar Video</string>
+    <string name="video_resume_prompt">Lanjutkan dari %1$s?</string>
+    <string name="video_resume_action">Lanjutkan</string>
+    <string name="video_start_over">Mulai Ulang</string>
+    <string name="aspect_ratio_fit">Pas Layar (Fit)</string>
+    <string name="aspect_ratio_fill">Penuh Layar (Fill)</string>
+    <string name="aspect_ratio_zoom">Perbesar (Zoom)</string>
+    <string name="aspect_ratio_mode_fit">Pas Layar</string>
+    <string name="aspect_ratio_mode_fill">Isi Layar</string>
+    <string name="aspect_ratio_mode_zoom">Zoom</string>
+    <string name="rotation_lock">Kunci Orientasi</string>
+    <string name="rotation_unlocked">Orientasi Otomatis</string>
+    <string name="loop_on">Ulang Aktif</string>
+    <string name="loop_off">Ulang Nonaktif</string>
+    <string name="pip_mode">Gambar dalam Gambar (PiP)</string>
+    <string name="audio_tracks">Pilihan Trek Audio</string>
+    <string name="audio_track_default">Trek Audio Standar</string>
+
+    <!-- Subtitle -->
+    <string name="subtitle_title">Trek Subtitle</string>
+    <string name="subtitle_none">Tanpa Subtitle (Mati)</string>
+    <string name="subtitle_add_external">Pilih Berkas Subtitle (.srt, .vtt, .ass)…</string>
+    <string name="subtitle_settings">Pengaturan Subtitle</string>
+    <string name="subtitle_font_size">Ukuran Teks</string>
+    <string name="subtitle_color">Warna Teks</string>
+    <string name="subtitle_background">Latar Belakang Teks</string>
+    <string name="subtitle_delay">Sinkronisasi Penundaan</string>
+    <string name="subtitle_delay_seconds">%1$+.1f detik</string>
+    <string name="subtitle_ass_note">Catatan: Format .ass/.ssa ditampilkan dalam mode teks dasar.</string>
+    <string name="subtitle_no_tracks">Tidak ada trek subtitle tersedia</string>
+
+    <!-- Izin & Keamanan -->
+    <string name="permission_title">Izin Akses Media</string>
+    <string name="permission_description">Lilith MV membutuhkan izin untuk membaca berkas musik dan video di perangkat Anda agar dapat diputar dengan lancar.</string>
+    <string name="permission_grant">Izinkan Akses</string>
+
+    <!-- Notifikasi & Layanan -->
+    <string name="notification_channel_name">Pemutaran Media</string>
+    <string name="notification_channel_desc">Menampilkan status pemutaran musik di latar belakang</string>
+
+    <!-- Pengaturan Aplikasi -->
+    <string name="settings_title">Pengaturan</string>
+    <string name="settings_theme">Tema</string>
+    <string name="settings_theme_system">Sistem</string>
+    <string name="settings_theme_dark">Gelap</string>
+    <string name="settings_theme_light">Terang</string>
+    <string name="settings_gapless">Putar Tanpa Jeda</string>
+    <string name="settings_pause_on_headset">Jeda saat Headset Lepas</string>
+    <string name="settings_preferred_subtitle_lang">Bahasa Subtitle</string>
+    <string name="settings_about">Tentang</string>
+    <string name="settings_version">Lilith MV v1.0.0</string>
+    <string name="settings_app_desc">Pemutar media native ringan dengan dukungan audio lossless dan subtitle multi-format.</string>
+
+    <!-- Pesan & Kesalahan -->
+    <string name="error_unsupported_codec">Format berkas atau codec tidak didukung oleh perangkat ini.</string>
+    <string name="error_skipping_next">Melewati ke trek berikutnya…</string>
+    <string name="empty_music_list">Belum ada file musik ditemukan di perangkat ini.</string>
+    <string name="empty_video_list">Belum ada file video ditemukan di perangkat ini.</string>
+</resources>

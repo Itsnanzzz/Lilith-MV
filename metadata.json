@@ -1,0 +1,6 @@
+{
+  "name": "Lilith MV",
+  "description": "Pemutar musik dan video ringan dengan audio lossless, background playback, dan dukungan subtitle lengkap",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
