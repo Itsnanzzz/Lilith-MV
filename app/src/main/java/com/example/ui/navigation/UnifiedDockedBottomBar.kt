@@ -78,7 +78,7 @@ const val SHOW_NAV_LABELS = true
 /**
  * Clean, flat Unified Docked Bottom Panel combining:
  * 1. Mini player row inside a sleek dark rounded card (matching reference layout).
- * 2. 3-tab navigation bar (Musik, Video, Pengaturan).
+ * 2. 3-tab navigation bar (Music, Video, Settings).
  * Completely straight, edge-to-edge rectangular panel (0dp radius) with a 1dp hairline divider at top.
  */
 @Composable
@@ -280,7 +280,7 @@ fun UnifiedDockedBottomBar(
                 }
             }
 
-            // 2. Navigation Row (3 tabs: Musik, Video, Pengaturan)
+            // 2. Navigation Row (3 tabs: Music, Video, Settings)
             val tabs = remember {
                 listOf(
                     Triple(MainNavigationTab.MUSIC, R.string.nav_music, "nav_music_item"),
@@ -373,7 +373,7 @@ fun UnifiedDockedBottomBar(
 // PREVIEWS
 // =========================================================================
 
-@Preview(name = "Docked Bar Light - With Track (Musik)", showBackground = true, backgroundColor = 0xFFFFFFFF)
+@Preview(name = "Docked Bar Light - With Track (Music)", showBackground = true, backgroundColor = 0xFFFFFFFF)
 @Composable
 fun UnifiedDockedBottomBarLightWithTrackPreview() {
     LilithTheme(darkTheme = false) {
@@ -433,7 +433,7 @@ fun UnifiedDockedBottomBarDarkWithTrackPreview() {
     }
 }
 
-@Preview(name = "Docked Bar Light - No Track (Pengaturan)", showBackground = true, backgroundColor = 0xFFFFFFFF)
+@Preview(name = "Docked Bar Light - No Track (Settings)", showBackground = true, backgroundColor = 0xFFFFFFFF)
 @Composable
 fun UnifiedDockedBottomBarLightNoTrackPreview() {
     LilithTheme(darkTheme = false) {
@@ -456,7 +456,7 @@ fun UnifiedDockedBottomBarLightNoTrackPreview() {
     }
 }
 
-@Preview(name = "Docked Bar Dark - No Track (Musik)", showBackground = true, backgroundColor = 0xFF0E1117)
+@Preview(name = "Docked Bar Dark - No Track (Music)", showBackground = true, backgroundColor = 0xFF0E1117)
 @Composable
 fun UnifiedDockedBottomBarDarkNoTrackPreview() {
     LilithTheme(darkTheme = true) {

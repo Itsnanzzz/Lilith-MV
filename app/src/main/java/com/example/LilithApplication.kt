@@ -11,9 +11,6 @@ import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.example.data.LilithDatabase
 import com.example.data.MediaThumbnailFetcher
-import com.example.ui.common.getAppLocales
-import com.example.ui.common.getAppString
-import com.example.ui.common.setAppLocales
 
 class LilithApplication : Application(), ImageLoaderFactory {
 
@@ -22,11 +19,6 @@ class LilithApplication : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
-        com.example.ui.common.logLangDebug(this, "App.onCreate.beforeDefault")
-        if (getAppLocales(this).isEmpty) {
-            setAppLocales(this, "id")
-        }
-        com.example.ui.common.logLangDebug(this, "App.onCreate.afterDefault")
         instance = this
         database = LilithDatabase.getInstance(this)
         createNotificationChannel()
@@ -57,10 +49,10 @@ class LilithApplication : Application(), ImageLoaderFactory {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID_PLAYBACK,
-                getAppString(R.string.notification_channel_name),
+                getString(R.string.notification_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = getAppString(R.string.notification_channel_desc)
+                description = getString(R.string.notification_channel_desc)
                 setShowBadge(false)
             }
             val notificationManager = getSystemService(NotificationManager::class.java)

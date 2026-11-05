@@ -20,7 +20,6 @@ import com.example.data.model.AudioTrack
 import com.example.data.model.FolderItem
 import com.example.data.model.SubtitleTrackInfo
 import com.example.data.model.VideoItem
-import com.example.ui.common.getAppString
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -78,8 +77,8 @@ class MediaRepository(private val context: Context) {
                     val title = if (!rawTitle.isNullOrBlank() && rawTitle != "<unknown>") rawTitle else fileName
 
                     val folderName = if (path.isNotEmpty()) {
-                        File(path).parentFile?.name ?: context.getAppString(R.string.default_storage_folder)
-                    } else context.getAppString(R.string.default_storage_folder)
+                        File(path).parentFile?.name ?: context.getString(R.string.default_storage_folder)
+                    } else context.getString(R.string.default_storage_folder)
 
                     val contentUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id).toString()
                     val albumArtUri = if (albumId > 0) "content://media/external/audio/albumart/$albumId" else contentUri
@@ -89,8 +88,8 @@ class MediaRepository(private val context: Context) {
                             id = id,
                             uri = contentUri,
                             title = title,
-                            artist = if (artist == "<unknown>") context.getAppString(R.string.unknown_artist) else artist,
-                            album = if (album == "<unknown>") context.getAppString(R.string.unknown_album) else album,
+                            artist = if (artist == "<unknown>") context.getString(R.string.unknown_artist) else artist,
+                            album = if (album == "<unknown>") context.getString(R.string.unknown_album) else album,
                             albumId = albumId,
                             durationMs = duration,
                             path = path,
@@ -147,8 +146,8 @@ class MediaRepository(private val context: Context) {
                     val title = if (!rawTitle.isNullOrBlank()) rawTitle else fileName
 
                     val folderName = if (path.isNotEmpty()) {
-                        File(path).parentFile?.name ?: context.getAppString(R.string.default_video_folder)
-                    } else context.getAppString(R.string.default_video_folder)
+                        File(path).parentFile?.name ?: context.getString(R.string.default_video_folder)
+                    } else context.getString(R.string.default_video_folder)
 
                     val contentUri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id).toString()
 
@@ -181,11 +180,11 @@ class MediaRepository(private val context: Context) {
             retriever.setDataSource(context, uri)
             val title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
                 ?: uri.lastPathSegment?.substringAfterLast('/')?.substringBeforeLast('.')
-                ?: context.getAppString(R.string.default_audio_track)
+                ?: context.getString(R.string.default_audio_track)
             val artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
-                ?: context.getAppString(R.string.unknown_artist)
+                ?: context.getString(R.string.unknown_artist)
             val album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)
-                ?: context.getAppString(R.string.unknown_album)
+                ?: context.getString(R.string.unknown_album)
             val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
             val duration = durationStr?.toLongOrNull() ?: 0L
             val mime = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE)
@@ -199,7 +198,7 @@ class MediaRepository(private val context: Context) {
                 album = album,
                 durationMs = duration,
                 path = uri.path ?: "",
-                folderName = context.getAppString(R.string.subtitle_external_file),
+                folderName = context.getString(R.string.subtitle_external_file),
                 mimeType = mime,
                 albumArtUri = uri.toString()
             )
@@ -207,9 +206,9 @@ class MediaRepository(private val context: Context) {
             AudioTrack(
                 id = System.currentTimeMillis(),
                 uri = uri.toString(),
-                title = uri.lastPathSegment?.substringAfterLast('/') ?: context.getAppString(R.string.default_audio_track),
-                artist = context.getAppString(R.string.unknown_artist),
-                album = context.getAppString(R.string.default_album_title),
+                title = uri.lastPathSegment?.substringAfterLast('/') ?: context.getString(R.string.default_audio_track),
+                artist = context.getString(R.string.unknown_artist),
+                album = context.getString(R.string.default_album_title),
                 durationMs = 0L
             )
         }
@@ -220,7 +219,7 @@ class MediaRepository(private val context: Context) {
             val retriever = MediaMetadataRetriever()
             retriever.setDataSource(context, uri)
             val title = uri.lastPathSegment?.substringAfterLast('/')?.substringBeforeLast('.')
-                ?: context.getAppString(R.string.default_video_folder)
+                ?: context.getString(R.string.default_video_folder)
             val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
             val duration = durationStr?.toLongOrNull() ?: 0L
             val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
@@ -235,14 +234,14 @@ class MediaRepository(private val context: Context) {
                 width = width,
                 height = height,
                 path = uri.path ?: "",
-                folderName = context.getAppString(R.string.subtitle_external_file),
+                folderName = context.getString(R.string.subtitle_external_file),
                 thumbnailUri = uri.toString()
             )
         } catch (e: Exception) {
             VideoItem(
                 id = System.currentTimeMillis(),
                 uri = uri.toString(),
-                title = uri.lastPathSegment?.substringAfterLast('/') ?: context.getAppString(R.string.default_video_folder),
+                title = uri.lastPathSegment?.substringAfterLast('/') ?: context.getString(R.string.default_video_folder),
                 durationMs = 0L
             )
         }
@@ -280,7 +279,7 @@ class MediaRepository(private val context: Context) {
                     val langLabel = if (langPart.isNotEmpty()) {
                         langPart.uppercase()
                     } else {
-                        context.getAppString(R.string.subtitle_external_ext, ext)
+                        context.getString(R.string.subtitle_external_ext, ext)
                     }
 
                     subtitles.add(
@@ -343,7 +342,7 @@ class MediaRepository(private val context: Context) {
         val uri = try {
             Uri.parse(track.uri)
         } catch (e: Exception) {
-            return@withContext DeleteTrackResult.Error(context.getAppString(R.string.delete_error_invalid_uri))
+            return@withContext DeleteTrackResult.Error(context.getString(R.string.delete_error_invalid_uri))
         }
 
         // 1. SAF Documents Provider URI
@@ -351,11 +350,11 @@ class MediaRepository(private val context: Context) {
             return@withContext try {
                 val deleted = DocumentsContract.deleteDocument(contentResolver, uri)
                 if (deleted) DeleteTrackResult.Success
-                else DeleteTrackResult.Error(context.getAppString(R.string.delete_error_doc_readonly))
+                else DeleteTrackResult.Error(context.getString(R.string.delete_error_doc_readonly))
             } catch (se: SecurityException) {
-                DeleteTrackResult.Error(context.getAppString(R.string.delete_error_readonly_permission))
+                DeleteTrackResult.Error(context.getString(R.string.delete_error_readonly_permission))
             } catch (e: Exception) {
-                DeleteTrackResult.Error(e.localizedMessage ?: context.getAppString(R.string.delete_error_doc_generic))
+                DeleteTrackResult.Error(e.localizedMessage ?: context.getString(R.string.delete_error_doc_generic))
             }
         }
 
@@ -379,9 +378,9 @@ class MediaRepository(private val context: Context) {
                 try {
                     val count = contentResolver.delete(uri, null, null)
                     if (count > 0) DeleteTrackResult.Success
-                    else DeleteTrackResult.Error(e.localizedMessage ?: context.getAppString(R.string.delete_error_request_failed))
+                    else DeleteTrackResult.Error(e.localizedMessage ?: context.getString(R.string.delete_error_request_failed))
                 } catch (ex: Exception) {
-                    DeleteTrackResult.Error(ex.localizedMessage ?: context.getAppString(R.string.delete_error_generic))
+                    DeleteTrackResult.Error(ex.localizedMessage ?: context.getString(R.string.delete_error_generic))
                 }
             }
         }
@@ -391,15 +390,15 @@ class MediaRepository(private val context: Context) {
             return@withContext try {
                 val count = contentResolver.delete(uri, null, null)
                 if (count > 0) DeleteTrackResult.Success
-                else DeleteTrackResult.Error(context.getAppString(R.string.delete_error_file_not_found))
+                else DeleteTrackResult.Error(context.getString(R.string.delete_error_file_not_found))
             } catch (securityEx: SecurityException) {
                 if (securityEx is android.app.RecoverableSecurityException) {
                     DeleteTrackResult.RequiresIntentSender(securityEx.userAction.actionIntent.intentSender, track)
                 } else {
-                    DeleteTrackResult.Error(securityEx.localizedMessage ?: context.getAppString(R.string.delete_error_permission_denied))
+                    DeleteTrackResult.Error(securityEx.localizedMessage ?: context.getString(R.string.delete_error_permission_denied))
                 }
             } catch (e: Exception) {
-                DeleteTrackResult.Error(e.localizedMessage ?: context.getAppString(R.string.delete_error_generic))
+                DeleteTrackResult.Error(e.localizedMessage ?: context.getString(R.string.delete_error_generic))
             }
         }
 
@@ -424,7 +423,7 @@ class MediaRepository(private val context: Context) {
             contentResolver.delete(uri, null, null)
             DeleteTrackResult.Success
         } catch (e: Exception) {
-            DeleteTrackResult.Error(e.localizedMessage ?: context.getAppString(R.string.delete_error_generic))
+            DeleteTrackResult.Error(e.localizedMessage ?: context.getString(R.string.delete_error_generic))
         }
     }
 

@@ -55,8 +55,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.data.ThemeMode
 import com.example.data.AppAccent
-import com.example.ui.common.getAppLocales
-import com.example.ui.common.normalizeLanguageTag
 import com.example.ui.common.PermissionView
 import com.example.ui.music.EqualizerDialog
 import com.example.ui.music.MiniPlayer
@@ -90,21 +88,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        com.example.ui.common.logLangDebug(this, "MainActivity.onCreate.entry(savedInstance=${savedInstanceState != null})")
-
-        val appLocales = getAppLocales(this)
-        val targetLang = if (!appLocales.isEmpty) {
-            normalizeLanguageTag(appLocales.get(0))
-        } else {
-            "id"
-        }
-        val currentConfigLang = normalizeLanguageTag(resources.configuration.locales.get(0))
-        if (currentConfigLang != targetLang && lastSyncedLocaleTag != targetLang) {
-            lastSyncedLocaleTag = targetLang
-            recreate()
-            return
-        }
-        lastSyncedLocaleTag = targetLang
 
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(
@@ -118,11 +101,6 @@ class MainActivity : AppCompatActivity() {
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
-        }
-
-        if (savedInstanceState != null) {
-            musicViewModel.syncLocale(currentConfigLang)
-            videoLibraryViewModel.syncLocale(currentConfigLang)
         }
 
         setContent {
@@ -142,15 +120,6 @@ class MainActivity : AppCompatActivity() {
                     settingsViewModel = settingsViewModel
                 )
             }
-        }
-    }
-
-    companion object {
-        @Volatile
-        private var lastSyncedLocaleTag: String? = null
-
-        fun clearLastSyncedLocaleTag() {
-            lastSyncedLocaleTag = null
         }
     }
 }

@@ -27,7 +27,6 @@ import com.example.LilithApplication
 import com.example.MainActivity
 import com.example.R
 import com.example.data.model.AudioFormatInfo
-import com.example.ui.common.getAppString
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 
@@ -48,10 +47,10 @@ class MusicPlaybackService : MediaSessionService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 LilithApplication.CHANNEL_ID_PLAYBACK,
-                getAppString(R.string.notification_channel_name),
+                getString(R.string.notification_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = getAppString(R.string.notification_channel_desc)
+                description = getString(R.string.notification_channel_desc)
                 setShowBadge(false)
             }
             getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
@@ -98,8 +97,8 @@ class MusicPlaybackService : MediaSessionService() {
                 Handler(Looper.getMainLooper()).post {
                     Toast.makeText(
                         applicationContext,
-                        getAppString(R.string.error_unsupported_codec) + " " +
-                                getAppString(R.string.error_skipping_next),
+                        getString(R.string.error_unsupported_codec) + " " +
+                                getString(R.string.error_skipping_next),
                         Toast.LENGTH_LONG
                     ).show()
                 }

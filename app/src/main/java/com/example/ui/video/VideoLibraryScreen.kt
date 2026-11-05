@@ -80,7 +80,7 @@ import kotlin.math.abs
  * Clean, minimal flat Video Library Screen with Swipeable Folder Pager:
  * - 40dp AppSearchField with two 40dp tonal circular buttons for SAF file picker and refresh
  * - 32dp AppChip filter row for video folders with smooth auto-scrolling
- * - HorizontalPager for "Semua" + each folder page
+ * - HorizontalPager for "All" + each folder page
  * - Flat list of video rows with 16:9 rounded thumbnails (12dp radius), duration badge pill,
  *   15sp SemiBold title, and 13sp folder/resolution metadata
  */
@@ -133,7 +133,7 @@ fun VideoLibraryScreen(
     }
 
     // Keep user on the same folder when folder list updates (scan, new video, deleted video).
-    // Fall back to "Semua" (page 0) if current folder disappears.
+    // Fall back to "All" (page 0) if current folder disappears.
     LaunchedEffect(uiState.folders) {
         val currentName = selectedFolderName
         val targetPage = if (currentName == null) 0 else {
@@ -145,9 +145,9 @@ fun VideoLibraryScreen(
         }
     }
 
-    // Hoisted per-page scroll states keyed by folder name ("Semua" for page 0)
+    // Hoisted per-page scroll states keyed by folder name ("All" for page 0)
     val listStates = remember { mutableMapOf<String, LazyListState>() }
-    val activeKeys = remember(uiState.folders) { setOf("Semua") + uiState.folders.map { it.name } }
+    val activeKeys = remember(uiState.folders) { setOf("All") + uiState.folders.map { it.name } }
     LaunchedEffect(activeKeys) {
         listStates.keys.retainAll(activeKeys)
     }
@@ -221,13 +221,13 @@ fun VideoLibraryScreen(
             ),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            item(key = "Semua") {
+            item(key = "All") {
                 val isSelected = pagerState.currentPage == 0
                 AppChip(
                     text = stringResource(R.string.filter_all_count, uiState.allVideos.size),
                     selected = isSelected,
                     onClick = { onChipClick(0) },
-                    testTag = "chip_video_folder_semua"
+                    testTag = "chip_video_folder_all"
                 )
             }
             itemsIndexed(
@@ -269,10 +269,10 @@ fun VideoLibraryScreen(
                     modifier = Modifier.fillMaxSize(),
                     beyondViewportPageCount = 0,
                     key = { page ->
-                        if (page == 0) "Semua" else uiState.folders.getOrNull(page - 1)?.name ?: "page_$page"
+                        if (page == 0) "All" else uiState.folders.getOrNull(page - 1)?.name ?: "page_$page"
                     }
                 ) { page ->
-                    val pageKey = if (page == 0) "Semua" else uiState.folders.getOrNull(page - 1)?.name ?: "page_$page"
+                    val pageKey = if (page == 0) "All" else uiState.folders.getOrNull(page - 1)?.name ?: "page_$page"
                     val listState = listStates.getOrPut(pageKey) { LazyListState() }
 
                     val displayVideos = remember(uiState.allVideos, uiState.folders, uiState.searchQuery, page) {
@@ -481,9 +481,9 @@ fun VideoCardItem(
     }
 }
 
-@Preview(name = "Video Library - Semua Light", showBackground = true, backgroundColor = 0xFFFFFFFF)
+@Preview(name = "Video Library - All Light", showBackground = true, backgroundColor = 0xFFFFFFFF)
 @Composable
-fun VideoLibrarySemuaLightPreview() {
+fun VideoLibraryAllLightPreview() {
     LilithTheme(darkTheme = false) {
         val sampleVideos = listOf(
             VideoItem(id = 1, uri = "v1", title = "Nature Walk in Forest.mp4", durationMs = 125000, height = 1080, folderName = "Camera", path = "/storage/emulated/0/DCIM/Camera/Nature.mp4"),
@@ -499,7 +499,7 @@ fun VideoLibrarySemuaLightPreview() {
                 contentPadding = PaddingValues(horizontal = AppTokens.ScreenHorizontalPadding),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                item { AppChip(text = "Semua (2)", selected = true, onClick = {}) }
+                item { AppChip(text = "All (2)", selected = true, onClick = {}) }
                 item { AppChip(text = "Camera (1)", selected = false, onClick = {}) }
                 item { AppChip(text = "Downloads (1)", selected = false, onClick = {}) }
             }
@@ -532,7 +532,7 @@ fun VideoLibraryFolderDarkPreview() {
                 contentPadding = PaddingValues(horizontal = AppTokens.ScreenHorizontalPadding),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                item { AppChip(text = "Semua (1)", selected = false, onClick = {}) }
+                item { AppChip(text = "All (1)", selected = false, onClick = {}) }
                 item { AppChip(text = "Camera (1)", selected = true, onClick = {}) }
             }
             LazyColumn(

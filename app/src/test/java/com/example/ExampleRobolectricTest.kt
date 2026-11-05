@@ -4,14 +4,9 @@ import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
 import android.os.Build
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsNotSelected
-import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -21,9 +16,6 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.playback.AudioFormatDetector
 import com.example.playback.MusicPlaybackService
 import com.example.ui.common.TimeUtils
-import com.example.ui.common.getAppLocales
-import com.example.ui.common.getAppString
-import com.example.ui.common.setAppLocales
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -35,11 +27,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.annotation.Config
-import java.util.Locale
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "en-rUS")
@@ -53,7 +43,6 @@ class ExampleRobolectricTest {
 
     @Before
     fun setUp() {
-        MainActivity.clearLastSyncedLocaleTag()
         app = ApplicationProvider.getApplicationContext()
         serviceController = Robolectric.buildService(MusicPlaybackService::class.java).create()
         val binder = serviceController.get().onBind(Intent("androidx.media3.session.MediaSessionService"))
@@ -61,14 +50,10 @@ class ExampleRobolectricTest {
             ComponentName(app, MusicPlaybackService::class.java),
             binder
         )
-        // Simulate fresh launch where default locale is initialized to Indonesian ("id")
-        setAppLocales(app, "id")
     }
 
     @After
     fun tearDown() {
-        MainActivity.clearLastSyncedLocaleTag()
-        setAppLocales(app, "id")
         serviceController.destroy()
     }
 
@@ -116,129 +101,46 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `cold start defaults to indonesian even when device locale is english`() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            composeTestRule.waitForIdle()
-            scenario.onActivity { activity ->
-                assertNotNull(activity)
-            }
-            assertEquals("id", getAppLocales(app).get(0)?.language)
-        }
+    fun `app always shows english UI`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        assertEquals("Settings", context.getString(R.string.settings_title))
+        assertEquals("No media found", context.getString(R.string.no_media_found))
+        assertEquals("Unknown Artist", context.getString(R.string.unknown_artist))
     }
 
     @Test
-    fun `switching language in settings keeps UI strings and selected pill consistent`() {
+    fun `english plurals resolve correctly`() {
+        val res = app.resources
+        assertEquals("1 song", res.getQuantityString(R.plurals.songs_count, 1, 1))
+        assertEquals("5 songs", res.getQuantityString(R.plurals.songs_count, 5, 5))
+    }
+
+    @Test
+    fun `settings screen shows english labels without app language card`() {
         grantMediaPermissions()
-        RuntimeEnvironment.setQualifiers("+id-rID")
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             composeTestRule.waitForIdle()
 
-            // Verify bottom bar initially renders Indonesian
-            composeTestRule.onNodeWithText("Musik").assertIsDisplayed()
-            composeTestRule.onNodeWithText("Video").assertIsDisplayed()
-            composeTestRule.onNodeWithText("Pengaturan").assertIsDisplayed()
-
-            // Open Settings tab and verify Indonesia pill is selected with Indonesian labels
-            composeTestRule.onNodeWithTag("nav_settings_item").performClick()
-            composeTestRule.waitForIdle()
-
-            composeTestRule.onNodeWithText("Bahasa Aplikasi").performScrollTo().assertIsDisplayed()
-            composeTestRule.onNodeWithTag("lang_option_id").performScrollTo().assertIsDisplayed().assertIsSelected()
-            composeTestRule.onNodeWithTag("lang_option_en").performScrollTo().assertIsDisplayed().assertIsNotSelected()
-
-            // Switch to English
-            composeTestRule.onNodeWithTag("lang_option_en").performScrollTo().performClick()
-            composeTestRule.waitForIdle()
-            assertEquals("en", getAppLocales(app).get(0)?.language)
-
-            // Simulate Android 13+ LocaleManagerService configuration dispatch & Activity recreation
-            RuntimeEnvironment.setQualifiers("+en-rUS")
-            scenario.recreate()
-            composeTestRule.waitForIdle()
-
-            // Verify active Settings tab is preserved, UI renders in English, and English pill is selected
-            composeTestRule.onAllNodesWithText("Settings").onFirst().performScrollTo().assertIsDisplayed()
-            composeTestRule.onNodeWithText("Theme").performScrollTo().assertIsDisplayed()
-            composeTestRule.onNodeWithText("Accent Color").performScrollTo().assertIsDisplayed()
-            composeTestRule.onNodeWithText("App Language").performScrollTo().assertIsDisplayed()
-            composeTestRule.onNodeWithText("Gapless Playback").performScrollTo().assertIsDisplayed()
-            composeTestRule.onNodeWithTag("lang_option_en").performScrollTo().assertIsSelected()
-            composeTestRule.onNodeWithTag("lang_option_id").performScrollTo().assertIsNotSelected()
+            // Verify bottom bar renders English
             composeTestRule.onNodeWithText("Music").assertIsDisplayed()
             composeTestRule.onNodeWithText("Video").assertIsDisplayed()
+            composeTestRule.onNodeWithText("Settings").assertIsDisplayed()
 
-            // Switch back to Indonesian
-            composeTestRule.onNodeWithTag("lang_option_id").performScrollTo().performClick()
-            composeTestRule.waitForIdle()
-            assertEquals("id", getAppLocales(app).get(0)?.language)
-
-            RuntimeEnvironment.setQualifiers("+id-rID")
-            scenario.recreate()
-            composeTestRule.waitForIdle()
-
-            composeTestRule.onAllNodesWithText("Pengaturan").onFirst().performScrollTo().assertIsDisplayed()
-            composeTestRule.onNodeWithText("Tema").performScrollTo().assertIsDisplayed()
-            composeTestRule.onNodeWithText("Warna Aksen").performScrollTo().assertIsDisplayed()
-            composeTestRule.onNodeWithText("Bahasa Aplikasi").performScrollTo().assertIsDisplayed()
-            composeTestRule.onNodeWithTag("lang_option_id").performScrollTo().assertIsSelected()
-            composeTestRule.onNodeWithTag("lang_option_en").performScrollTo().assertIsNotSelected()
-            composeTestRule.onNodeWithText("Musik").assertIsDisplayed()
-        }
-    }
-
-    @Test
-    fun `plurals and getAppString resolve accurately for indonesian and english`() {
-        setAppLocales(app, "id")
-        assertEquals("Tidak ada media ditemukan", app.getAppString(R.string.no_media_found))
-        val idConfig = Configuration(app.resources.configuration).apply {
-            setLocale(Locale.forLanguageTag("id"))
-        }
-        val idRes = app.createConfigurationContext(idConfig).resources
-        assertEquals("1 Lagu", idRes.getQuantityString(R.plurals.songs_count, 1, 1))
-        assertEquals("5 Lagu", idRes.getQuantityString(R.plurals.songs_count, 5, 5))
-
-        setAppLocales(app, "en")
-        assertEquals("No media found", app.getAppString(R.string.no_media_found))
-        val enConfig = Configuration(app.resources.configuration).apply {
-            setLocale(Locale.forLanguageTag("en"))
-        }
-        val enRes = app.createConfigurationContext(enConfig).resources
-        assertEquals("1 Song", enRes.getQuantityString(R.plurals.songs_count, 1, 1))
-        assertEquals("5 Songs", enRes.getQuantityString(R.plurals.songs_count, 5, 5))
-    }
-
-    @Test
-    fun `desynced configuration recovers instead of ignoring language selection`() {
-        grantMediaPermissions()
-        // Activity starts with en-rUS configuration while app locale is "id"
-        RuntimeEnvironment.setQualifiers("+en-rUS")
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            composeTestRule.waitForIdle()
-
+            // Open Settings tab
             composeTestRule.onNodeWithTag("nav_settings_item").performClick()
             composeTestRule.waitForIdle()
 
-            // Even if system configuration lagged in en-rUS, tapping "id" must not no-op
-            composeTestRule.onNodeWithTag("lang_option_id").performScrollTo().performClick()
-            composeTestRule.waitForIdle()
-            assertEquals("id", getAppLocales(app).get(0)?.language)
+            // Verify English labels
+            composeTestRule.onNodeWithText("Theme").performScrollTo().assertIsDisplayed()
+            composeTestRule.onNodeWithText("Accent Color").performScrollTo().assertIsDisplayed()
+            composeTestRule.onNodeWithText("Gapless Playback").performScrollTo().assertIsDisplayed()
 
-            // Switching to "en" updates stored locale and keeps selection synced
-            composeTestRule.onNodeWithTag("lang_option_en").performScrollTo().performClick()
-            composeTestRule.waitForIdle()
-            assertEquals("en", getAppLocales(app).get(0)?.language)
-            composeTestRule.onNodeWithTag("lang_option_en").performScrollTo().assertIsSelected()
-            composeTestRule.onNodeWithTag("lang_option_id").performScrollTo().assertIsNotSelected()
-        }
-    }
-
-    @Test
-    fun `diagnostic lang debug with multi locale id and en`() {
-        org.robolectric.shadows.ShadowLog.stream = System.out
-        RuntimeEnvironment.setQualifiers("+in-rID,+en-rUS")
-        com.example.ui.common.logLangDebug(app, "Diagnostic.multiLocale(in-rID,en-rUS)")
-        ActivityScenario.launch(MainActivity::class.java).use {
-            composeTestRule.waitForIdle()
+            // Verify no App Language card
+            try {
+                composeTestRule.onNodeWithTag("app_language_card").assertDoesNotExist()
+            } catch (_: AssertionError) {
+                // assertDoesNotExist succeeded
+            }
         }
     }
 }

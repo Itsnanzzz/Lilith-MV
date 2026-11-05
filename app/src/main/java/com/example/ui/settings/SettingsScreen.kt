@@ -27,7 +27,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,13 +61,12 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.data.AppAccent
-import androidx.compose.material.icons.filled.Translate
 
 /**
  * Clean, flat Settings Screen matching reference design:
  * - Grouped sections inside surfaceMuted cards (16dp radius)
  * - Modern AppSegmentedControl for Theme mode
- * - "Warna Aksen" card with 7 circular swatches
+ * - Accent Color card with 7 circular swatches
  * - Flat AppSwitch components for playback behavior toggles
  * - AppChip row for subtitle language preferences
  * - Clean AppSecondaryButton for subtitle customization dialog
@@ -81,23 +79,12 @@ fun SettingsScreen(
     val colors = AppThemeTokens.colors
     val themeMode by viewModel.themeMode.collectAsState()
     val appAccent by viewModel.appAccent.collectAsState()
-    val appLanguage by viewModel.currentAppLanguage.collectAsState()
     val gapless by viewModel.gaplessPlayback.collectAsState()
     val pauseOnHeadset by viewModel.pauseOnHeadsetUnplug.collectAsState()
     val subtitleLang by viewModel.preferredSubtitleLanguage.collectAsState()
     val subtitleSettings by viewModel.subtitleSettings.collectAsState()
 
-    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val activeConfigLang = remember(configuration) {
-        com.example.ui.common.normalizeLanguageTag(configuration.locales.get(0))
-    }
-
     var showSubtitleStyleDialog by remember { mutableStateOf(false) }
-
-    LaunchedEffect(activeConfigLang) {
-        viewModel.refreshAppLanguage(activeConfigLang)
-    }
 
     Column(
         modifier = modifier
@@ -166,7 +153,7 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // 1.5. Accent Color Card
+        // 2. Accent Color Card
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -278,58 +265,7 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // 1.6. App Language Card
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(AppTokens.Radius16))
-                .background(colors.surfaceMuted)
-                .padding(16.dp)
-                .testTag("app_language_card")
-        ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Translate,
-                        contentDescription = null,
-                        tint = colors.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = stringResource(R.string.settings_app_language),
-                        style = AppTypography.listTitle,
-                        color = colors.textPrimary
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                val langOptions = listOf("id", "en")
-                val indonesianLabel = stringResource(R.string.lang_indonesian)
-                val englishLabel = stringResource(R.string.lang_english)
-                AppSegmentedControl(
-                    items = langOptions,
-                    selectedItem = appLanguage,
-                    onItemSelected = { tag ->
-                        viewModel.setAppLanguage(
-                            tag = tag,
-                            activeConfigLanguage = activeConfigLang,
-                            activity = context as? android.app.Activity
-                        )
-                    },
-                    labelProvider = { tag ->
-                        if (tag == "id") indonesianLabel else englishLabel
-                    },
-                    itemTestTagProvider = { "lang_option_$it" },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // 2. Playback Behavior (Gapless & Pause on Headset Unplug)
+        // 3. Playback Behavior (Gapless & Pause on Headset Unplug)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -426,7 +362,7 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // 3. Subtitle Preferences Card
+        // 4. Subtitle Preferences Card
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -510,7 +446,7 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // 4. About App Card
+        // 5. About App Card
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -594,10 +530,10 @@ private fun AccentSampleDemo() {
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AppChip(text = "Dipilih", selected = true, onClick = {})
-            AppChip(text = "Biasa", selected = false, onClick = {})
+            AppChip(text = "Selected", selected = true, onClick = {})
+            AppChip(text = "Normal", selected = false, onClick = {})
         }
-        AppPrimaryButton(text = "Putar Musik", onClick = {})
+        AppPrimaryButton(text = "Play Music", onClick = {})
         AppSwitch(checked = true, onCheckedChange = {})
     }
 }
