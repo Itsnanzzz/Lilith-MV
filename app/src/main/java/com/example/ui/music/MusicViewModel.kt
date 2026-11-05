@@ -18,7 +18,6 @@ import com.example.data.model.FolderItem
 import com.example.playback.EqualizerState
 import com.example.playback.MusicPlaybackService
 import com.example.playback.MusicPlayerManager
-import com.example.ui.common.getAppString
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -81,26 +80,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         MusicPlaybackService.serviceInstance?.equalizerController?.state
             ?: MutableStateFlow(EqualizerState())
 
-    private var loadedLocaleTag: String? = null
-
     init {
         scanMediaLibrary()
     }
 
-    fun syncLocale(languageTag: String) {
-        if (loadedLocaleTag != null && loadedLocaleTag != languageTag) {
-            loadedLocaleTag = languageTag
-            scanMediaLibrary()
-        } else {
-            loadedLocaleTag = languageTag
-        }
-    }
-
     fun scanMediaLibrary() {
         viewModelScope.launch {
-            loadedLocaleTag = com.example.ui.common.normalizeLanguageTag(
-                com.example.ui.common.getAppLocales(getApplication()).get(0)
-            )
             _uiState.value = _uiState.value.copy(isScanning = true)
             val tracks = repository.getAudioTracks()
             val albums = repository.groupIntoAlbums(tracks)
@@ -312,7 +297,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     _uiState.value = _uiState.value.copy(isDeletingTrack = false, trackToDelete = null)
                     _deleteEvents.emit(
                         MusicDeleteEvent.ShowMessage(
-                            getApplication<Application>().getAppString(R.string.delete_failed_with_reason, result.message)
+                            getApplication<Application>().getString(R.string.delete_failed_with_reason, result.message)
                         )
                     )
                 }
@@ -331,7 +316,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         _uiState.value = _uiState.value.copy(isDeletingTrack = false, trackToDelete = null)
                         _deleteEvents.emit(
                             MusicDeleteEvent.ShowMessage(
-                                getApplication<Application>().getAppString(R.string.delete_failed)
+                                getApplication<Application>().getString(R.string.delete_failed)
                             )
                         )
                     }
@@ -352,7 +337,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             viewModelScope.launch {
                 _deleteEvents.emit(
                     MusicDeleteEvent.ShowMessage(
-                        getApplication<Application>().getAppString(R.string.storage_permission_required)
+                        getApplication<Application>().getString(R.string.storage_permission_required)
                     )
                 )
             }
@@ -397,7 +382,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
             _deleteEvents.emit(
                 MusicDeleteEvent.ShowMessage(
-                    getApplication<Application>().getAppString(R.string.song_deleted)
+                    getApplication<Application>().getString(R.string.song_deleted)
                 )
             )
         }

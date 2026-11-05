@@ -281,7 +281,7 @@ fun MusicScreen(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // 2. Filter Chips: Lagu, Album, Folder, Playlist (32dp tall, 13sp, 20dp start padding, 4 chips share row evenly)
+            // 2. Filter Chips: Songs, Albums, Folders, Playlists (32dp tall, 13sp, 20dp start padding, 4 chips share row evenly)
             val tabs = listOf(
                 MusicTab.SONGS to stringResource(R.string.tab_songs),
                 MusicTab.ALBUMS to stringResource(R.string.tab_albums),
@@ -644,7 +644,7 @@ fun SongsListView(
  * Flat Song Row:
  * - 48dp artwork with 10dp radius
  * - Title 15sp SemiBold, one line, ellipsis
- * - Subtitle row: AppBadge, artist, duration ("Artis • 2:46") in 13sp textSecondary
+ * - Subtitle row: AppBadge, artist, duration ("Artist • 2:46") in 13sp textSecondary
  * - Three-dot button: 20dp icon, 48dp touch target, textSecondary
  * - Currently playing row: surfaceMuted rounded background (12dp), title in primary, animated equalizer bars
  */
@@ -768,7 +768,7 @@ fun SongRowItem(
                         }
                     )
 
-                    // "Hapus dari Playlist" (Inside playlist detail only)
+                    // "Remove from Playlist" (Inside playlist detail only)
                     if (onRemoveFromPlaylist != null) {
                         DropdownMenuItem(
                             text = {
@@ -826,7 +826,7 @@ fun SongRowItem(
                         }
                     }
 
-                    // "Hapus Permanen" as LAST item, separated by hairline divider (Never in playlist detail)
+                    // "Delete Permanently" as LAST item, separated by hairline divider (Never in playlist detail)
                     if (currentPlaylistId == null && onDeletePermanently != null) {
                         HorizontalDivider(
                             modifier = Modifier.padding(vertical = 4.dp),
@@ -964,7 +964,7 @@ fun AnimatedEqualizerBars(
  * Collection DETAIL screen (Album, Artist, Folder, Playlist):
  * - Header like the reference: artwork ~96dp with 20dp radius on the left
  * - Title 24sp Bold, subtitle 13sp textSecondary
- * - Two equal-width pill buttons: "Putar" (AppPrimaryButton) and "Acak" (AppSecondaryButton)
+ * - Two equal-width pill buttons: "Play" (AppPrimaryButton) and "Shuffle" (AppSecondaryButton)
  */
 @Composable
 fun CollectionDetailView(
@@ -1009,7 +1009,7 @@ fun CollectionDetailView(
             }
         }
 
-        // Collection Header (Matches Reference: 96dp artwork with 20dp radius on left, 24sp Bold title, Putar & Acak pill buttons)
+        // Collection Header (Matches Reference: 96dp artwork with 20dp radius on left, 24sp Bold title, Play & Shuffle pill buttons)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1054,7 +1054,7 @@ fun CollectionDetailView(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Two Equal-Width Pill Buttons: "Putar" & "Acak"
+            // Two Equal-Width Pill Buttons: "Play" & "Shuffle"
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1385,7 +1385,7 @@ fun EmptyStateView(
     }
 }
 
-@Preview(name = "Music Tab - Lagu Light", showBackground = true, backgroundColor = 0xFFFFFFFF)
+@Preview(name = "Music Tab - Songs Light", showBackground = true, backgroundColor = 0xFFFFFFFF)
 @Composable
 fun MusicTabSongsLightPreview() {
     LilithTheme(darkTheme = false) {
@@ -1438,7 +1438,7 @@ fun MusicTabPlaylistsDarkPreview() {
     LilithTheme(darkTheme = true) {
         PlaylistsView(
             playlists = listOf(
-                PlaylistEntity(id = 1, name = "Favorit", createdAt = 0),
+                PlaylistEntity(id = 1, name = "Favorites", createdAt = 0),
                 PlaylistEntity(id = 2, name = "Chill Vibes", createdAt = 0)
             ),
             onPlaylistClick = {},

@@ -673,18 +673,18 @@ private fun FlatComponentsDemo() {
         AppSearchField(
             query = query,
             onQueryChange = { query = it },
-            placeholder = "Cari lagu, artis, video…"
+            placeholder = "Search songs, artists, videos…"
         )
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AppChip("Lagu", selected = chipSelected == 0, onClick = { chipSelected = 0 })
-            AppChip("Album", selected = chipSelected == 1, onClick = { chipSelected = 1 })
-            AppChip("Artis", selected = chipSelected == 2, onClick = { chipSelected = 2 })
+            AppChip("Songs", selected = chipSelected == 0, onClick = { chipSelected = 0 })
+            AppChip("Albums", selected = chipSelected == 1, onClick = { chipSelected = 1 })
+            AppChip("Artists", selected = chipSelected == 2, onClick = { chipSelected = 2 })
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            AppPrimaryButton("Putar", onClick = {}, icon = Icons.Default.PlayArrow)
-            AppSecondaryButton("Acak", onClick = {})
+            AppPrimaryButton("Play", onClick = {}, icon = Icons.Default.PlayArrow)
+            AppSecondaryButton("Shuffle", onClick = {})
             AppIconButton(onClick = {}, icon = Icons.Default.PlayArrow, contentDescription = null, isTonalCircle = true)
         }
 

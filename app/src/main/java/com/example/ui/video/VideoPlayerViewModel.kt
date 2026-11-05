@@ -25,7 +25,6 @@ import com.example.data.model.AspectRatioMode
 import com.example.data.model.SubtitleSettings
 import com.example.data.model.SubtitleTrackInfo
 import com.example.data.model.VideoItem
-import com.example.ui.common.getAppString
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -118,8 +117,8 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
                     override fun onPlayerError(error: PlaybackException) {
                         val app = getApplication<Application>()
-                        val message = app.getAppString(R.string.error_unsupported_codec) +
-                                "\n(" + (error.localizedMessage ?: app.getAppString(R.string.error_codec_fallback)) + ")"
+                        val message = app.getString(R.string.error_unsupported_codec) +
+                                "\n(" + (error.localizedMessage ?: app.getString(R.string.error_codec_fallback)) + ")"
                         _uiState.value = _uiState.value.copy(errorMessage = message)
                     }
                 })
@@ -382,7 +381,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
             if (group.type == C.TRACK_TYPE_AUDIO) {
                 for (t in 0 until trackGroup.length) {
                     val format = trackGroup.getFormat(t)
-                    val defaultAudioLabel = getApplication<Application>().getAppString(R.string.default_audio_track)
+                    val defaultAudioLabel = getApplication<Application>().getString(R.string.default_audio_track)
                     val lang = format.language?.uppercase() ?: "$defaultAudioLabel ${t + 1}"
                     val label = format.label ?: lang
                     audioList.add(
@@ -400,7 +399,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     val subId = "sub_${g}_$t"
                     val isSelected = group.isTrackSelected(t)
                     if (isSelected) selectedSubId = subId
-                    val defaultSubLabel = getApplication<Application>().getAppString(R.string.subtitle_title)
+                    val defaultSubLabel = getApplication<Application>().getString(R.string.subtitle_title)
                     val lang = format.language?.uppercase() ?: "$defaultSubLabel ${t + 1}"
                     val label = format.label ?: lang
                     subList.add(
@@ -484,7 +483,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
         val subInfo = SubtitleTrackInfo(
             id = uri.toString(),
-            label = getApplication<Application>().getAppString(R.string.subtitle_manual_label, fileName),
+            label = getApplication<Application>().getString(R.string.subtitle_manual_label, fileName),
             language = "manual",
             uri = uri.toString(),
             mimeType = mime,

@@ -505,8 +505,8 @@ fun AddToPlaylistDialog(
  * - 24dp radius container in surface
  * - 18sp SemiBold title
  * - 14sp textSecondary body with warning
- * - "Batal" AppSecondaryButton
- * - "Hapus" pill button filled with destructive color and white text
+ * - "Cancel" AppSecondaryButton
+ * - "Delete" pill button filled with destructive color and white text
  */
 @Composable
 fun DeletePermanentConfirmationDialog(

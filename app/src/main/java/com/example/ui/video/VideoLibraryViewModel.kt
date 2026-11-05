@@ -32,26 +32,12 @@ class VideoLibraryViewModel(application: Application) : AndroidViewModel(applica
     private val _uiState = MutableStateFlow(VideoLibraryUiState())
     val uiState: StateFlow<VideoLibraryUiState> = _uiState.asStateFlow()
 
-    private var loadedLocaleTag: String? = null
-
     init {
         scanVideos()
     }
 
-    fun syncLocale(languageTag: String) {
-        if (loadedLocaleTag != null && loadedLocaleTag != languageTag) {
-            loadedLocaleTag = languageTag
-            scanVideos()
-        } else {
-            loadedLocaleTag = languageTag
-        }
-    }
-
     fun scanVideos() {
         viewModelScope.launch {
-            loadedLocaleTag = com.example.ui.common.normalizeLanguageTag(
-                com.example.ui.common.getAppLocales(getApplication()).get(0)
-            )
             _uiState.value = _uiState.value.copy(isScanning = true)
             val list = repository.getVideos()
             val folders = list.groupBy { it.folderName }.map { (fName, vList) ->

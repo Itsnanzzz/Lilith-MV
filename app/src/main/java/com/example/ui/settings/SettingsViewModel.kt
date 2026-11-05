@@ -7,9 +7,6 @@ import com.example.data.AppAccent
 import com.example.data.SettingsDataStore
 import com.example.data.ThemeMode
 import com.example.data.model.SubtitleSettings
-import com.example.ui.common.getAppLocales
-import com.example.ui.common.normalizeLanguageTag
-import com.example.ui.common.setAppLocales
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -24,28 +21,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     val appAccent: StateFlow<AppAccent> = settingsDataStore.accentColorFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppAccent.WHITE)
-
-    private val _currentAppLanguage = kotlinx.coroutines.flow.MutableStateFlow(resolveCurrentLanguageTag())
-    val currentAppLanguage: StateFlow<String> = _currentAppLanguage
-
-    private fun resolveCurrentLanguageTag(activeConfigLanguage: String? = null): String {
-        return try {
-            val locales = getAppLocales(getApplication())
-            if (!locales.isEmpty) {
-                normalizeLanguageTag(locales.get(0))
-            } else if (activeConfigLanguage != null) {
-                if (activeConfigLanguage == "en") "en" else "id"
-            } else {
-                "id"
-            }
-        } catch (_: Exception) {
-            if (activeConfigLanguage == "en") "en" else "id"
-        }
-    }
-
-    fun refreshAppLanguage(activeConfigLanguage: String? = null) {
-        _currentAppLanguage.value = resolveCurrentLanguageTag(activeConfigLanguage)
-    }
 
     val gaplessPlayback: StateFlow<Boolean> = settingsDataStore.gaplessPlaybackFlow
         .stateIn(viewModelScope, SharingStarted.Lazily, true)
@@ -68,33 +43,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setAccentColor(accent: AppAccent) {
         viewModelScope.launch {
             settingsDataStore.setAccentColor(accent)
-        }
-    }
-
-    fun setAppLanguage(
-        tag: String,
-        activeConfigLanguage: String? = null,
-        activity: android.app.Activity? = null
-    ) {
-        val normalized = if (tag == "en") "en" else "id"
-        val currentLocales = getAppLocales(getApplication())
-        val currentStoredTag = resolveCurrentLanguageTag(activeConfigLanguage)
-        if (!currentLocales.isEmpty &&
-            currentStoredTag == normalized &&
-            (activeConfigLanguage == null || activeConfigLanguage == normalized)
-        ) {
-            _currentAppLanguage.value = normalized
-            return
-        }
-        _currentAppLanguage.value = normalized
-        setAppLocales(getApplication(), normalized)
-        com.example.ui.common.logLangDebug(activity ?: getApplication(), "SettingsVM.afterSwitch($normalized)")
-        if (!currentLocales.isEmpty &&
-            currentStoredTag == normalized &&
-            activeConfigLanguage != null &&
-            activeConfigLanguage != normalized
-        ) {
-            activity?.recreate()
         }
     }
 
