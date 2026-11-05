@@ -7,9 +7,15 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -18,6 +24,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,10 +34,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,17 +56,18 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.ui.window.Dialog
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -62,6 +77,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -69,33 +85,39 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.db.PlaylistEntity
 import com.example.data.model.AlbumItem
-import com.example.data.model.ArtistItem
 import com.example.data.model.AudioTrack
 import com.example.data.model.FolderItem
 import com.example.playback.AudioFormatDetector
-import com.example.ui.common.MediaFormatBadge
 import com.example.ui.common.MusicThumbnail
 import com.example.ui.common.TimeUtils
-import com.example.ui.theme.NeumorphLevel
-import com.example.ui.theme.NeumorphStyle
-import com.example.ui.theme.NeumorphicCard
-import com.example.ui.theme.NeumorphicChip
-import com.example.ui.theme.NeumorphicIconButton
-import com.example.ui.theme.NeumorphicTextField
-import com.example.ui.theme.NeumorphicTheme
-import com.example.ui.theme.NeumorphicTokens
-import com.example.ui.theme.neumorphic
+import com.example.ui.theme.AppBadge
+import com.example.ui.theme.AppChip
+import com.example.ui.theme.AppIconButton
+import com.example.ui.theme.AppPrimaryButton
+import com.example.ui.theme.AppSearchField
+import com.example.ui.theme.AppSecondaryButton
+import com.example.ui.theme.AppThemeTokens
+import com.example.ui.theme.AppTokens
+import com.example.ui.theme.AppTypography
+import com.example.ui.theme.LilithTheme
+import com.example.ui.theme.rememberIsAnimationDisabled
 import kotlinx.coroutines.launch
 
 @Composable
@@ -103,7 +125,7 @@ fun MusicScreen(
     viewModel: MusicViewModel,
     modifier: Modifier = Modifier
 ) {
-    val colors = NeumorphicTheme.colors
+    val colors = AppThemeTokens.colors
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -111,6 +133,56 @@ fun MusicScreen(
     val uiState by viewModel.uiState.collectAsState()
     val playlists by viewModel.playlists.collectAsState()
     val currentPlayingTrack by viewModel.playerManager.currentTrack.collectAsState()
+    val isPlaying by viewModel.playerManager.isPlaying.collectAsState()
+    val isAnimationDisabled = rememberIsAnimationDisabled()
+
+    // Hoisted scroll positions so each page keeps its own position when swiped away and back
+    val songsListState = rememberLazyListState()
+    val albumsGridState = rememberLazyGridState()
+    val foldersListState = rememberLazyListState()
+    val playlistsListState = rememberLazyListState()
+
+    val initialPage = when (uiState.selectedTab) {
+        MusicTab.SONGS -> 0
+        MusicTab.ALBUMS -> 1
+        MusicTab.FOLDERS -> 2
+        MusicTab.PLAYLISTS -> 3
+    }
+    val pagerState = rememberPagerState(
+        initialPage = initialPage,
+        pageCount = { 4 }
+    )
+
+    // Sync ViewModel tab when pager settles on a new page
+    LaunchedEffect(pagerState.settledPage) {
+        val newTab = when (pagerState.settledPage) {
+            0 -> MusicTab.SONGS
+            1 -> MusicTab.ALBUMS
+            2 -> MusicTab.FOLDERS
+            3 -> MusicTab.PLAYLISTS
+            else -> MusicTab.SONGS
+        }
+        if (uiState.selectedTab != newTab) {
+            viewModel.setTab(newTab)
+        }
+    }
+
+    // Sync pager if uiState.selectedTab changes externally (e.g. restoring state or initial load)
+    LaunchedEffect(uiState.selectedTab) {
+        val targetPage = when (uiState.selectedTab) {
+            MusicTab.SONGS -> 0
+            MusicTab.ALBUMS -> 1
+            MusicTab.FOLDERS -> 2
+            MusicTab.PLAYLISTS -> 3
+        }
+        if (pagerState.currentPage != targetPage && !pagerState.isScrollInProgress) {
+            if (isAnimationDisabled) {
+                pagerState.scrollToPage(targetPage)
+            } else {
+                pagerState.animateScrollToPage(targetPage)
+            }
+        }
+    }
 
     // SAF file picker for audio tracks
     val safAudioLauncher = rememberLauncherForActivityResult(
@@ -164,156 +236,126 @@ fun MusicScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             Spacer(modifier = Modifier.height(10.dp))
 
-            // 1. Search & Action Header: Slimmer 40dp height, same horizontal length, 48dp touch targets
+            // 1. Top Search & Action Row: Search Field (40dp) + 2 Tonal Circle Icon Buttons (40dp)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                    .padding(horizontal = AppTokens.ScreenHorizontalPadding, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                NeumorphicTextField(
-                    value = uiState.searchQuery,
-                    onValueChange = { viewModel.setSearchQuery(it) },
-                    placeholder = { Text(stringResource(R.string.search_placeholder), fontSize = 13.sp) },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Cari",
-                            tint = colors.textSecondary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    },
+                AppSearchField(
+                    query = uiState.searchQuery,
+                    onQueryChange = { viewModel.setSearchQuery(it) },
+                    placeholder = stringResource(R.string.search_placeholder),
                     modifier = Modifier
                         .weight(1f)
-                        .height(40.dp)
                         .testTag("search_music_input")
                 )
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                // Open SAF audio button: visual 40dp inside 48dp touch target box
-                Box(
-                    modifier = Modifier.size(48.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    NeumorphicIconButton(
-                        onClick = { safAudioLauncher.launch(arrayOf("audio/*")) },
-                        size = 40.dp,
-                        level = NeumorphLevel.SMALL,
-                        contentDescription = stringResource(R.string.open_saf_file),
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Default.FileOpen,
-                                contentDescription = null,
-                                tint = colors.accent,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        },
-                        modifier = Modifier.testTag("open_saf_audio_button")
-                    )
-                }
+                // Open SAF Audio: 40dp tonal circle in surfaceMuted with 20dp icon
+                AppIconButton(
+                    onClick = { safAudioLauncher.launch(arrayOf("audio/*")) },
+                    icon = Icons.Default.FileOpen,
+                    contentDescription = stringResource(R.string.open_saf_file),
+                    isTonalCircle = true,
+                    iconSize = 20.dp,
+                    tintOverride = colors.textPrimary,
+                    testTag = "open_saf_audio_button"
+                )
 
-                Spacer(modifier = Modifier.width(2.dp))
+                Spacer(modifier = Modifier.width(4.dp))
 
-                // Rescan Library button: visual 40dp inside 48dp touch target box
-                Box(
-                    modifier = Modifier.size(48.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    NeumorphicIconButton(
-                        onClick = { viewModel.scanMediaLibrary() },
-                        size = 40.dp,
-                        level = NeumorphLevel.SMALL,
-                        contentDescription = stringResource(R.string.scan_library),
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = null,
-                                tint = colors.textSecondary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        },
-                        modifier = Modifier.testTag("rescan_library_button")
-                    )
-                }
+                // Rescan Library: 40dp tonal circle in surfaceMuted with 20dp icon
+                AppIconButton(
+                    onClick = { viewModel.scanMediaLibrary() },
+                    icon = Icons.Default.Refresh,
+                    contentDescription = stringResource(R.string.scan_library),
+                    isTonalCircle = true,
+                    iconSize = 20.dp,
+                    tintOverride = colors.textPrimary,
+                    testTag = "rescan_library_button"
+                )
             }
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // 2. Compact Filter Chips: Lagu, Album, Artis, Folder, Playlist (fits 1 row without scroll on ~360dp phone)
+            // 2. Filter Chips: Lagu, Album, Folder, Playlist (32dp tall, 13sp, 20dp start padding, 4 chips share row evenly)
             val tabs = listOf(
                 MusicTab.SONGS to stringResource(R.string.tab_songs),
                 MusicTab.ALBUMS to stringResource(R.string.tab_albums),
-                MusicTab.ARTISTS to stringResource(R.string.tab_artists),
                 MusicTab.FOLDERS to stringResource(R.string.tab_folders),
                 MusicTab.PLAYLISTS to stringResource(R.string.tab_playlists)
             )
 
+            val selectedTabIndex = if (pagerState.isScrollInProgress) {
+                pagerState.currentPage
+            } else {
+                pagerState.settledPage
+            }
+
+            val onTabClick: (Int, MusicTab) -> Unit = { pageIndex, tab ->
+                val isSelected = selectedTabIndex == pageIndex
+                if (isSelected) {
+                    when (tab) {
+                        MusicTab.ALBUMS -> if (uiState.selectedAlbum != null) viewModel.selectAlbum(null)
+                        MusicTab.FOLDERS -> if (uiState.selectedFolder != null) viewModel.selectFolder(null)
+                        MusicTab.PLAYLISTS -> if (uiState.selectedPlaylist != null) viewModel.selectPlaylist(null)
+                        MusicTab.SONGS -> {}
+                    }
+                } else {
+                    coroutineScope.launch {
+                        if (isAnimationDisabled) {
+                            pagerState.scrollToPage(pageIndex)
+                        } else {
+                            pagerState.animateScrollToPage(pageIndex)
+                        }
+                    }
+                }
+            }
+
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .padding(horizontal = AppTokens.ScreenHorizontalPadding, vertical = 6.dp)
             ) {
-                val availableWidth = maxWidth
-                if (availableWidth >= 320.dp) {
-                    // Shared row width across 5 chips with 6dp spacing
+                val fontScale = LocalDensity.current.fontScale
+                val canFitSingleRow = maxWidth >= 300.dp && fontScale <= 1.25f
+
+                if (canFitSingleRow) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        tabs.forEach { (tab, title) ->
-                            val isSelected = uiState.selectedTab == tab
-                            NeumorphicChip(
+                        tabs.forEachIndexed { index, (tab, title) ->
+                            val isSelected = selectedTabIndex == index
+                            AppChip(
+                                text = title,
                                 selected = isSelected,
-                                onClick = {
-                                    if (isSelected && tab == MusicTab.PLAYLISTS && uiState.selectedPlaylist != null) {
-                                        viewModel.selectPlaylist(null)
-                                    } else {
-                                        viewModel.setTab(tab)
-                                    }
-                                },
+                                onClick = { onTabClick(index, tab) },
                                 modifier = Modifier
                                     .weight(1f)
-                                    .testTag("tab_${tab.name.lowercase()}"),
-                                label = {
-                                    Text(
-                                        text = title,
-                                        fontSize = 13.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        maxLines = 1
-                                    )
-                                }
+                                    .testTag("tab_${tab.name.lowercase()}")
                             )
                         }
                     }
                 } else {
-                    // Fallback scrollable row for narrow devices with aligned start padding
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        items(tabs) { (tab, title) ->
-                            val isSelected = uiState.selectedTab == tab
-                            NeumorphicChip(
+                        tabs.forEachIndexed { index, (tab, title) ->
+                            val isSelected = selectedTabIndex == index
+                            AppChip(
+                                text = title,
                                 selected = isSelected,
-                                onClick = {
-                                    if (isSelected && tab == MusicTab.PLAYLISTS && uiState.selectedPlaylist != null) {
-                                        viewModel.selectPlaylist(null)
-                                    } else {
-                                        viewModel.setTab(tab)
-                                    }
-                                },
-                                modifier = Modifier.testTag("tab_${tab.name.lowercase()}"),
-                                label = {
-                                    Text(
-                                        text = title,
-                                        fontSize = 13.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        maxLines = 1
-                                    )
-                                }
+                                onClick = { onTabClick(index, tab) },
+                                modifier = Modifier.testTag("tab_${tab.name.lowercase()}")
                             )
                         }
                     }
@@ -322,7 +364,7 @@ fun MusicScreen(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // 3. Main Tab Content
+            // 3. Tab Content - Swipeable Horizontal Pager across the 4 sections
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -333,134 +375,174 @@ fun MusicScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = colors.accent)
+                        CircularProgressIndicator(color = colors.primary)
                     }
                 } else {
-                    when (uiState.selectedTab) {
-                        MusicTab.SONGS -> {
-                            SongsListView(
-                                tracks = uiState.filteredTracks,
-                                currentPlayingTrackUri = currentPlayingTrack?.uri,
-                                playlists = playlists,
-                                onPlayTrack = { track -> viewModel.playTrack(track) },
-                                onAddToQueue = { track -> viewModel.playerManager.addToQueue(track) },
-                                onAddToPlaylist = { pId, track -> viewModel.addTrackToPlaylist(pId, track) },
-                                onDeletePermanently = { track -> viewModel.requestDeleteTrack(track) },
-                                isDeletingTrack = uiState.isDeletingTrack
-                            )
-                        }
+                    val isDetailShowing = when (pagerState.currentPage) {
+                        1 -> uiState.selectedAlbum != null
+                        2 -> uiState.selectedFolder != null
+                        3 -> uiState.selectedPlaylist != null
+                        else -> false
+                    }
 
-                        MusicTab.ALBUMS -> {
-                            if (uiState.selectedAlbum != null) {
-                                val albumTracks = uiState.allTracks.filter { it.album == uiState.selectedAlbum?.title }
-                                DetailTrackListView(
-                                    title = uiState.selectedAlbum?.title ?: "Album",
-                                    subtitle = uiState.selectedAlbum?.artist ?: "",
-                                    tracks = albumTracks,
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxSize(),
+                        userScrollEnabled = !isDetailShowing,
+                        beyondViewportPageCount = 0,
+                        key = { page -> page }
+                    ) { page ->
+                        when (page) {
+                            0 -> {
+                                SongsListView(
+                                    tracks = uiState.filteredTracks,
                                     currentPlayingTrackUri = currentPlayingTrack?.uri,
+                                    isPlaying = isPlaying,
                                     playlists = playlists,
-                                    onBack = { viewModel.selectAlbum(null) },
-                                    onPlayTrack = { track -> viewModel.playTrack(track, albumTracks) },
+                                    listState = songsListState,
+                                    onPlayTrack = { track -> viewModel.playTrack(track) },
                                     onAddToQueue = { track -> viewModel.playerManager.addToQueue(track) },
                                     onAddToPlaylist = { pId, track -> viewModel.addTrackToPlaylist(pId, track) },
-                                    showBackButton = true,
                                     onDeletePermanently = { track -> viewModel.requestDeleteTrack(track) },
                                     isDeletingTrack = uiState.isDeletingTrack
                                 )
-                            } else {
-                                AlbumsGridView(
-                                    albums = uiState.albums,
-                                    onAlbumClick = { viewModel.selectAlbum(it) }
-                                )
                             }
-                        }
 
-                        MusicTab.ARTISTS -> {
-                            if (uiState.selectedArtist != null) {
-                                val artistTracks = uiState.allTracks.filter { it.artist == uiState.selectedArtist?.name }
-                                DetailTrackListView(
-                                    title = uiState.selectedArtist?.name ?: "Artis",
-                                    subtitle = "${artistTracks.size} Lagu",
-                                    tracks = artistTracks,
-                                    currentPlayingTrackUri = currentPlayingTrack?.uri,
-                                    playlists = playlists,
-                                    onBack = { viewModel.selectArtist(null) },
-                                    onPlayTrack = { track -> viewModel.playTrack(track, artistTracks) },
-                                    onAddToQueue = { track -> viewModel.playerManager.addToQueue(track) },
-                                    onAddToPlaylist = { pId, track -> viewModel.addTrackToPlaylist(pId, track) },
-                                    showBackButton = true,
-                                    onDeletePermanently = { track -> viewModel.requestDeleteTrack(track) },
-                                    isDeletingTrack = uiState.isDeletingTrack
-                                )
-                            } else {
-                                ArtistsListView(
-                                    artists = uiState.artists,
-                                    onArtistClick = { viewModel.selectArtist(it) }
-                                )
-                            }
-                        }
-
-                        MusicTab.FOLDERS -> {
-                            if (uiState.selectedFolder != null) {
-                                val folderTracks = uiState.allTracks.filter { it.folderName == uiState.selectedFolder?.name }
-                                DetailTrackListView(
-                                    title = uiState.selectedFolder?.name ?: "Folder",
-                                    subtitle = "${folderTracks.size} Lagu",
-                                    tracks = folderTracks,
-                                    currentPlayingTrackUri = currentPlayingTrack?.uri,
-                                    playlists = playlists,
-                                    onBack = { viewModel.selectFolder(null) },
-                                    onPlayTrack = { track -> viewModel.playTrack(track, folderTracks) },
-                                    onAddToQueue = { track -> viewModel.playerManager.addToQueue(track) },
-                                    onAddToPlaylist = { pId, track -> viewModel.addTrackToPlaylist(pId, track) },
-                                    showBackButton = true,
-                                    onDeletePermanently = { track -> viewModel.requestDeleteTrack(track) },
-                                    isDeletingTrack = uiState.isDeletingTrack
-                                )
-                            } else {
-                                FoldersListView(
-                                    folders = uiState.folders,
-                                    onFolderClick = { viewModel.selectFolder(it) }
-                                )
-                            }
-                        }
-
-                        MusicTab.PLAYLISTS -> {
-                            val currentPlaylist = uiState.selectedPlaylist
-                            if (currentPlaylist != null) {
-                                DetailTrackListView(
-                                    title = currentPlaylist.name,
-                                    subtitle = "${uiState.playlistSongs.size} Lagu",
-                                    tracks = uiState.playlistSongs,
-                                    currentPlayingTrackUri = currentPlayingTrack?.uri,
-                                    playlists = playlists,
-                                    onBack = { viewModel.selectPlaylist(null) },
-                                    onPlayTrack = { track -> viewModel.playTrack(track, uiState.playlistSongs) },
-                                    onAddToQueue = { track -> viewModel.playerManager.addToQueue(track) },
-                                    onAddToPlaylist = { pId, track -> viewModel.addTrackToPlaylist(pId, track) },
-                                    showBackButton = false,
-                                    currentPlaylistId = currentPlaylist.id,
-                                    onRemoveFromPlaylist = { track ->
-                                        coroutineScope.launch {
-                                            val removedEntity = viewModel.removeTrackFromPlaylist(currentPlaylist.id, track)
-                                            val result = snackbarHostState.showSnackbar(
-                                                message = context.getString(R.string.playlist_song_removed),
-                                                actionLabel = context.getString(R.string.undo),
-                                                duration = SnackbarDuration.Short
-                                            )
-                                            if (result == SnackbarResult.ActionPerformed && removedEntity != null) {
-                                                viewModel.restorePlaylistSong(removedEntity)
+                            1 -> {
+                                if (uiState.selectedAlbum != null) {
+                                    val album = uiState.selectedAlbum!!
+                                    val albumTracks = uiState.allTracks.filter { it.album == album.title }
+                                    CollectionDetailView(
+                                        title = album.title,
+                                        subtitle = album.artist,
+                                        artTarget = album.albumArtUri,
+                                        tracks = albumTracks,
+                                        currentPlayingTrackUri = currentPlayingTrack?.uri,
+                                        isPlaying = isPlaying,
+                                        playlists = playlists,
+                                        onBack = { viewModel.selectAlbum(null) },
+                                        onPlayTrack = { track -> viewModel.playTrack(track, albumTracks) },
+                                        onPlayAll = { viewModel.playAll(albumTracks) },
+                                        onShuffleAll = { viewModel.shuffleAll(albumTracks) },
+                                        onAddToQueue = { track -> viewModel.playerManager.addToQueue(track) },
+                                        onAddToPlaylist = { pId, track -> viewModel.addTrackToPlaylist(pId, track) },
+                                        showBackButton = true,
+                                        onDeletePermanently = { track -> viewModel.requestDeleteTrack(track) },
+                                        isDeletingTrack = uiState.isDeletingTrack
+                                    )
+                                } else {
+                                    val displayAlbums = remember(uiState.albums, uiState.searchQuery) {
+                                        if (uiState.searchQuery.isBlank()) {
+                                            uiState.albums
+                                        } else {
+                                            val q = uiState.searchQuery.trim()
+                                            uiState.albums.filter {
+                                                it.title.contains(q, ignoreCase = true) ||
+                                                        it.artist.contains(q, ignoreCase = true)
                                             }
                                         }
                                     }
-                                )
-                            } else {
-                                PlaylistsView(
-                                    playlists = playlists,
-                                    onPlaylistClick = { viewModel.selectPlaylist(it) },
-                                    onDeletePlaylist = { viewModel.deletePlaylist(it) },
-                                    onCreatePlaylist = { viewModel.setCreatePlaylistDialogVisible(true) }
-                                )
+                                    AlbumsGridView(
+                                        albums = displayAlbums,
+                                        gridState = albumsGridState,
+                                        onAlbumClick = { viewModel.selectAlbum(it) }
+                                    )
+                                }
+                            }
+
+                            2 -> {
+                                if (uiState.selectedFolder != null) {
+                                    val folder = uiState.selectedFolder!!
+                                    val folderTracks = uiState.allTracks.filter { it.folderName == folder.name }
+                                    CollectionDetailView(
+                                        title = folder.name,
+                                        subtitle = pluralStringResource(R.plurals.songs_count, folderTracks.size, folderTracks.size),
+                                        artTarget = folderTracks.firstOrNull()?.albumArtUri ?: folderTracks.firstOrNull()?.uri,
+                                        tracks = folderTracks,
+                                        currentPlayingTrackUri = currentPlayingTrack?.uri,
+                                        isPlaying = isPlaying,
+                                        playlists = playlists,
+                                        onBack = { viewModel.selectFolder(null) },
+                                        onPlayTrack = { track -> viewModel.playTrack(track, folderTracks) },
+                                        onPlayAll = { viewModel.playAll(folderTracks) },
+                                        onShuffleAll = { viewModel.shuffleAll(folderTracks) },
+                                        onAddToQueue = { track -> viewModel.playerManager.addToQueue(track) },
+                                        onAddToPlaylist = { pId, track -> viewModel.addTrackToPlaylist(pId, track) },
+                                        showBackButton = true,
+                                        onDeletePermanently = { track -> viewModel.requestDeleteTrack(track) },
+                                        isDeletingTrack = uiState.isDeletingTrack
+                                    )
+                                } else {
+                                    val displayFolders = remember(uiState.folders, uiState.searchQuery) {
+                                        if (uiState.searchQuery.isBlank()) {
+                                            uiState.folders
+                                        } else {
+                                            val q = uiState.searchQuery.trim()
+                                            uiState.folders.filter {
+                                                it.name.contains(q, ignoreCase = true)
+                                            }
+                                        }
+                                    }
+                                    FoldersListView(
+                                        folders = displayFolders,
+                                        listState = foldersListState,
+                                        onFolderClick = { viewModel.selectFolder(it) }
+                                    )
+                                }
+                            }
+
+                            3 -> {
+                                val currentPlaylist = uiState.selectedPlaylist
+                                if (currentPlaylist != null) {
+                                    CollectionDetailView(
+                                        title = currentPlaylist.name,
+                                        subtitle = pluralStringResource(R.plurals.songs_count, uiState.playlistSongs.size, uiState.playlistSongs.size),
+                                        artTarget = uiState.playlistSongs.firstOrNull()?.albumArtUri ?: uiState.playlistSongs.firstOrNull()?.uri,
+                                        tracks = uiState.playlistSongs,
+                                        currentPlayingTrackUri = currentPlayingTrack?.uri,
+                                        isPlaying = isPlaying,
+                                        playlists = playlists,
+                                        onBack = { viewModel.selectPlaylist(null) },
+                                        onPlayTrack = { track -> viewModel.playTrack(track, uiState.playlistSongs) },
+                                        onPlayAll = { viewModel.playAll(uiState.playlistSongs) },
+                                        onShuffleAll = { viewModel.shuffleAll(uiState.playlistSongs) },
+                                        onAddToQueue = { track -> viewModel.playerManager.addToQueue(track) },
+                                        onAddToPlaylist = { pId, track -> viewModel.addTrackToPlaylist(pId, track) },
+                                        showBackButton = false,
+                                        currentPlaylistId = currentPlaylist.id,
+                                        onRemoveFromPlaylist = { track ->
+                                            coroutineScope.launch {
+                                                val removedEntity = viewModel.removeTrackFromPlaylist(currentPlaylist.id, track)
+                                                val result = snackbarHostState.showSnackbar(
+                                                    message = context.getString(R.string.playlist_song_removed),
+                                                    actionLabel = context.getString(R.string.undo),
+                                                    duration = SnackbarDuration.Short
+                                                )
+                                                if (result == SnackbarResult.ActionPerformed && removedEntity != null) {
+                                                    viewModel.restorePlaylistSong(removedEntity)
+                                                }
+                                            }
+                                        }
+                                    )
+                                } else {
+                                    val displayPlaylists = remember(playlists, uiState.searchQuery) {
+                                        if (uiState.searchQuery.isBlank()) {
+                                            playlists
+                                        } else {
+                                            val q = uiState.searchQuery.trim()
+                                            playlists.filter {
+                                                it.name.contains(q, ignoreCase = true)
+                                            }
+                                        }
+                                    }
+                                    PlaylistsView(
+                                        playlists = displayPlaylists,
+                                        listState = playlistsListState,
+                                        onPlaylistClick = { viewModel.selectPlaylist(it) },
+                                        onDeletePlaylist = { viewModel.deletePlaylist(it) },
+                                        onCreatePlaylist = { viewModel.setCreatePlaylistDialogVisible(true) }
+                                    )
+                                }
                             }
                         }
                     }
@@ -468,12 +550,21 @@ fun MusicScreen(
             }
         }
 
-        // Snackbar Host for Playlist Removal & Undo Actions
+        // Floating Snackbar above bottom docked panel with 12dp radius and primary container
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 16.dp, start = 16.dp, end = 16.dp)
+                .padding(bottom = 76.dp, start = 20.dp, end = 20.dp),
+            snackbar = { data ->
+                Snackbar(
+                    snackbarData = data,
+                    shape = RoundedCornerShape(AppTokens.Radius12),
+                    containerColor = colors.primary,
+                    contentColor = colors.onPrimary,
+                    actionColor = colors.onPrimary
+                )
+            }
         )
     }
 
@@ -496,12 +587,13 @@ fun MusicScreen(
 }
 
 /**
- * List of songs with consistent 16dp horizontal padding and adequate bottom scroll clearance.
+ * Flat Song list: No cards, no per-item shadows, no dividers.
  */
 @Composable
 fun SongsListView(
     tracks: List<AudioTrack>,
     currentPlayingTrackUri: String?,
+    isPlaying: Boolean,
     playlists: List<PlaylistEntity>,
     onPlayTrack: (AudioTrack) -> Unit,
     onAddToQueue: (AudioTrack) -> Unit,
@@ -510,25 +602,21 @@ fun SongsListView(
     onRemoveFromPlaylist: ((AudioTrack) -> Unit)? = null,
     onDeletePermanently: ((AudioTrack) -> Unit)? = null,
     isDeletingTrack: Boolean = false,
-    emptyMessage: String = stringResource(R.string.no_media_found)
+    emptyMessage: String = stringResource(R.string.no_media_found),
+    listState: LazyListState = rememberLazyListState()
 ) {
-    val colors = NeumorphicTheme.colors
-
     if (tracks.isEmpty()) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = emptyMessage,
-                fontSize = 14.sp,
-                color = colors.textSecondary
-            )
-        }
+        EmptyStateView(
+            icon = Icons.Default.MusicNote,
+            title = emptyMessage,
+            subtitle = stringResource(R.string.empty_music_list)
+        )
     } else {
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, top = 6.dp, end = 16.dp, bottom = 24.dp)
+            contentPadding = PaddingValues(start = 20.dp, top = 6.dp, end = 20.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             items(
                 items = tracks,
@@ -536,7 +624,8 @@ fun SongsListView(
             ) { track ->
                 SongRowItem(
                     track = track,
-                    isPlaying = track.uri == currentPlayingTrackUri,
+                    isCurrentTrack = track.uri == currentPlayingTrackUri,
+                    isPlaying = isPlaying && track.uri == currentPlayingTrackUri,
                     playlists = playlists,
                     onClick = { onPlayTrack(track) },
                     onAddToQueue = { onAddToQueue(track) },
@@ -546,22 +635,23 @@ fun SongsListView(
                     onDeletePermanently = onDeletePermanently?.let { { it(track) } },
                     isDeleting = isDeletingTrack
                 )
-                Spacer(modifier = Modifier.height(8.dp))
             }
         }
     }
 }
 
 /**
- * Slimmer, tidier Neumorphic Song item card.
- * - Lightest shadow level (SMALL).
- * - Album art 48dp with 8dp rounded corners.
- * - Flat 3-dot options button (no shadow inside a raised card, 48dp touch target).
- * - Restyled popup menu with "Hapus dari Playlist" support.
+ * Flat Song Row:
+ * - 48dp artwork with 10dp radius
+ * - Title 15sp SemiBold, one line, ellipsis
+ * - Subtitle row: AppBadge, artist, duration ("Artis • 2:46") in 13sp textSecondary
+ * - Three-dot button: 20dp icon, 48dp touch target, textSecondary
+ * - Currently playing row: surfaceMuted rounded background (12dp), title in primary, animated equalizer bars
  */
 @Composable
 fun SongRowItem(
     track: AudioTrack,
+    isCurrentTrack: Boolean,
     isPlaying: Boolean,
     playlists: List<PlaylistEntity>,
     onClick: () -> Unit,
@@ -572,42 +662,28 @@ fun SongRowItem(
     onDeletePermanently: (() -> Unit)? = null,
     isDeleting: Boolean = false
 ) {
-    val colors = NeumorphicTheme.colors
+    val colors = AppThemeTokens.colors
     var menuExpanded by remember { mutableStateOf(false) }
     val formatInfo = remember(track.mimeType) {
         AudioFormatDetector.detectFromMime(track.mimeType)
     }
 
-    val itemShape = RoundedCornerShape(12.dp)
-    val cardStyle = if (isPlaying) NeumorphStyle.PRESSED else NeumorphStyle.RAISED
-
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .neumorphic(
-                shape = itemShape,
-                level = NeumorphLevel.SMALL, // Lightest shadow level
-                style = cardStyle,
-                lightShadowColorOverride = colors.lightShadow,
-                darkShadowColorOverride = colors.darkShadow,
-                backgroundColorOverride = colors.surface
-            )
-            .clip(itemShape)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            )
-            .padding(start = 10.dp, end = 4.dp, top = 8.dp, bottom = 8.dp) // Slimmer padding
+            .clip(RoundedCornerShape(AppTokens.Radius12))
+            .background(if (isCurrentTrack) colors.surfaceMuted else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
             .testTag("song_item_${track.id}")
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Album Art: 48dp container with rounded corners (8dp)
+            // 48dp Artwork with 10dp radius
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(colors.surface),
+                    .clip(RoundedCornerShape(AppTokens.Radius10))
+                    .background(colors.surfaceMuted),
                 contentAlignment = Alignment.Center
             ) {
                 val artTarget = track.albumArtUri?.takeIf { it.isNotBlank() } ?: track.uri
@@ -616,72 +692,66 @@ fun SongRowItem(
                     contentDescription = track.album,
                     modifier = Modifier.fillMaxSize()
                 )
+
+                if (isCurrentTrack) {
+                    AnimatedEqualizerBars(
+                        isPlaying = isPlaying,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
-            // Title & compact row below with badge, artist, and duration
+            // Title + subtitle row (badge, artist, duration)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = track.title,
-                    fontSize = 14.sp,
-                    fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.SemiBold,
-                    color = if (isPlaying) colors.accent else colors.textPrimary,
+                    style = AppTypography.listTitle,
+                    color = if (isCurrentTrack) colors.accentText else colors.textPrimary,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth()
+                    overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    MediaFormatBadge(formatInfo = formatInfo)
+                    AppBadge(isLossless = formatInfo.isLossless)
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "${track.artist} • ${TimeUtils.formatDuration(track.durationMs)}",
-                        fontSize = 12.sp,
+                        style = AppTypography.listSubtitle,
                         color = colors.textSecondary,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
 
-            // Flat 3-dot options button (never a raised circle in a raised card, 48dp touch target, 20dp icon)
+            // Flat Three-Dot Button
             Box(contentAlignment = Alignment.Center) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = { menuExpanded = true }
-                        )
-                        .testTag("song_more_button_${track.id}"),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "Opsi",
-                        tint = colors.textSecondary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                AppIconButton(
+                    onClick = { menuExpanded = true },
+                    icon = Icons.Default.MoreVert,
+                    contentDescription = stringResource(R.string.more_options),
+                    iconSize = 20.dp,
+                    tintOverride = colors.textSecondary,
+                    testTag = "song_more_button_${track.id}"
+                )
 
-                // Popup menu: Neumorphic raised surface, comfortable item height, 20dp icons, 14sp text
+                // Popup menu: surface color, 16dp radius, soft shadow, 14sp items, 20dp icons
                 DropdownMenu(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
                     modifier = Modifier
-                        .widthIn(min = 180.dp, max = 220.dp)
-                        .background(colors.surface, shape = RoundedCornerShape(12.dp))
+                        .widthIn(min = 190.dp, max = 240.dp)
+                        .shadow(elevation = 8.dp, shape = RoundedCornerShape(AppTokens.Radius16))
+                        .background(colors.surface, shape = RoundedCornerShape(AppTokens.Radius16))
                 ) {
                     DropdownMenuItem(
                         text = {
                             Text(
-                                stringResource(R.string.add_to_queue),
+                                text = stringResource(R.string.add_to_queue),
                                 color = colors.textPrimary,
-                                fontSize = 14.sp
+                                style = AppTypography.body
                             )
                         },
                         onClick = {
@@ -690,23 +760,22 @@ fun SongRowItem(
                         },
                         leadingIcon = {
                             Icon(
-                                Icons.Default.QueueMusic,
+                                imageVector = Icons.Default.QueueMusic,
                                 contentDescription = null,
-                                tint = colors.accent,
+                                tint = colors.textPrimary,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
                     )
 
-                    // "Hapus dari Playlist" entry if viewing inside playlist
+                    // "Hapus dari Playlist" (Inside playlist detail only)
                     if (onRemoveFromPlaylist != null) {
                         DropdownMenuItem(
                             text = {
                                 Text(
-                                    stringResource(R.string.playlist_remove_song),
-                                    color = Color(0xFFE57373),
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium
+                                    text = stringResource(R.string.playlist_remove_song),
+                                    color = colors.destructive,
+                                    style = AppTypography.body.copy(fontWeight = FontWeight.Medium)
                                 )
                             },
                             onClick = {
@@ -715,16 +784,16 @@ fun SongRowItem(
                             },
                             leadingIcon = {
                                 Icon(
-                                    Icons.Default.DeleteOutline,
+                                    imageVector = Icons.Default.DeleteOutline,
                                     contentDescription = null,
-                                    tint = Color(0xFFE57373),
+                                    tint = colors.destructive,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
                         )
                     }
 
-                    // Hide current playlist from "+ playlist" list
+                    // Eligible playlists to add to
                     val eligiblePlaylists = remember(playlists, currentPlaylistId) {
                         playlists.filter { it.id != currentPlaylistId }
                     }
@@ -734,9 +803,9 @@ fun SongRowItem(
                             DropdownMenuItem(
                                 text = {
                                     Text(
-                                        "+ ${playlist.name}",
+                                        text = stringResource(R.string.playlist_add_to, playlist.name),
                                         color = colors.textPrimary,
-                                        fontSize = 14.sp,
+                                        style = AppTypography.body,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -747,9 +816,9 @@ fun SongRowItem(
                                 },
                                 leadingIcon = {
                                     Icon(
-                                        Icons.Default.PlaylistPlay,
+                                        imageVector = Icons.Default.PlaylistPlay,
                                         contentDescription = null,
-                                        tint = colors.accent,
+                                        tint = colors.textPrimary,
                                         modifier = Modifier.size(20.dp)
                                     )
                                 }
@@ -757,20 +826,18 @@ fun SongRowItem(
                         }
                     }
 
-                    // "Hapus Permanen" as the LAST item, separated by a divider
-                    // Shown in Songs, Album, Artist, Folder; NEVER inside playlist detail
+                    // "Hapus Permanen" as LAST item, separated by hairline divider (Never in playlist detail)
                     if (currentPlaylistId == null && onDeletePermanently != null) {
                         HorizontalDivider(
                             modifier = Modifier.padding(vertical = 4.dp),
-                            color = colors.textSecondary.copy(alpha = 0.2f)
+                            color = colors.hairline
                         )
                         DropdownMenuItem(
                             text = {
                                 Text(
-                                    stringResource(R.string.delete_permanently),
-                                    color = Color(0xFFE57373),
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium
+                                    text = stringResource(R.string.delete_permanently),
+                                    color = colors.destructive,
+                                    style = AppTypography.body.copy(fontWeight = FontWeight.Medium)
                                 )
                             },
                             onClick = {
@@ -783,13 +850,13 @@ fun SongRowItem(
                                     CircularProgressIndicator(
                                         modifier = Modifier.size(18.dp),
                                         strokeWidth = 2.dp,
-                                        color = Color(0xFFE57373)
+                                        color = colors.destructive
                                     )
                                 } else {
                                     Icon(
                                         imageVector = Icons.Default.DeleteForever,
                                         contentDescription = null,
-                                        tint = Color(0xFFE57373),
+                                        tint = colors.destructive,
                                         modifier = Modifier.size(20.dp)
                                     )
                                 }
@@ -803,414 +870,115 @@ fun SongRowItem(
     }
 }
 
+/**
+ * Animated 3-bar equalizer overlay for currently playing song artwork.
+ */
 @Composable
-fun AlbumsGridView(
-    albums: List<AlbumItem>,
-    onAlbumClick: (AlbumItem) -> Unit
+fun AnimatedEqualizerBars(
+    isPlaying: Boolean,
+    modifier: Modifier = Modifier
 ) {
-    val colors = NeumorphicTheme.colors
+    val isAnimationDisabled = rememberIsAnimationDisabled()
+    val shouldAnimate = isPlaying && !isAnimationDisabled
 
-    if (albums.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(stringResource(R.string.no_media_found), color = colors.textSecondary)
-        }
+    val infiniteTransition = rememberInfiniteTransition(label = "eq_bars")
+    val height1 by if (shouldAnimate) {
+        infiniteTransition.animateFloat(
+            initialValue = 0.35f,
+            targetValue = 0.95f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(450, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "bar1"
+        )
     } else {
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 140.dp),
-            contentPadding = PaddingValues(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            items(albums, key = { it.title }) { album ->
-                val cardShape = RoundedCornerShape(NeumorphicTokens.RadiusMedium)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .neumorphic(
-                            shape = cardShape,
-                            level = NeumorphLevel.SMALL,
-                            style = NeumorphStyle.RAISED,
-                            lightShadowColorOverride = colors.lightShadow,
-                            darkShadowColorOverride = colors.darkShadow,
-                            backgroundColorOverride = colors.surface
-                        )
-                        .clip(cardShape)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = { onAlbumClick(album) }
-                        )
-                        .padding(10.dp)
-                        .testTag("album_card_${album.id}")
-                ) {
-                    Column {
-                        val imgShape = RoundedCornerShape(12.dp)
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(1f)
-                                .clip(imgShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            MusicThumbnail(
-                                artTarget = album.albumArtUri,
-                                contentDescription = album.title,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Text(
-                            text = album.title,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = colors.textPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "${album.artist} • ${album.trackCount} lagu",
-                            fontSize = 11.sp,
-                            color = colors.textSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-        }
+        remember(isPlaying) { mutableFloatStateOf(if (isPlaying) 0.7f else 0.4f) }
     }
-}
 
-@Composable
-fun ArtistsListView(
-    artists: List<ArtistItem>,
-    onArtistClick: (ArtistItem) -> Unit
-) {
-    val colors = NeumorphicTheme.colors
-
-    if (artists.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(stringResource(R.string.no_media_found), color = colors.textSecondary)
-        }
+    val height2 by if (shouldAnimate) {
+        infiniteTransition.animateFloat(
+            initialValue = 0.85f,
+            targetValue = 0.25f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(380, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "bar2"
+        )
     } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp)
-        ) {
-            items(artists, key = { it.name }) { artist ->
-                val cardShape = RoundedCornerShape(NeumorphicTokens.RadiusMedium)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .neumorphic(
-                            shape = cardShape,
-                            level = NeumorphLevel.SMALL,
-                            style = NeumorphStyle.RAISED,
-                            lightShadowColorOverride = colors.lightShadow,
-                            darkShadowColorOverride = colors.darkShadow,
-                            backgroundColorOverride = colors.surface
-                        )
-                        .clip(cardShape)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = { onArtistClick(artist) }
-                        )
-                        .padding(14.dp)
-                        .testTag("artist_card_${artist.name}")
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(42.dp)
-                                .neumorphic(
-                                    shape = CircleShape,
-                                    level = NeumorphLevel.SMALL,
-                                    style = NeumorphStyle.RAISED,
-                                    lightShadowColorOverride = colors.lightShadow,
-                                    darkShadowColorOverride = colors.darkShadow,
-                                    backgroundColorOverride = colors.surface
-                                )
-                                .clip(CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = colors.accent,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(14.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = artist.name,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = colors.textPrimary
-                            )
-                            Text(
-                                text = "${artist.trackCount} Lagu",
-                                fontSize = 12.sp,
-                                color = colors.textSecondary
-                            )
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(10.dp))
-            }
-        }
+        remember(isPlaying) { mutableFloatStateOf(if (isPlaying) 0.9f else 0.5f) }
     }
-}
 
-@Composable
-fun FoldersListView(
-    folders: List<FolderItem>,
-    onFolderClick: (FolderItem) -> Unit
-) {
-    val colors = NeumorphicTheme.colors
-
-    if (folders.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(stringResource(R.string.no_media_found), color = colors.textSecondary)
-        }
+    val height3 by if (shouldAnimate) {
+        infiniteTransition.animateFloat(
+            initialValue = 0.45f,
+            targetValue = 1.0f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(520, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "bar3"
+        )
     } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp)
-        ) {
-            items(folders, key = { it.path }) { folder ->
-                val cardShape = RoundedCornerShape(NeumorphicTokens.RadiusMedium)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .neumorphic(
-                            shape = cardShape,
-                            level = NeumorphLevel.SMALL,
-                            style = NeumorphStyle.RAISED,
-                            lightShadowColorOverride = colors.lightShadow,
-                            darkShadowColorOverride = colors.darkShadow,
-                            backgroundColorOverride = colors.surface
-                        )
-                        .clip(cardShape)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = { onFolderClick(folder) }
-                        )
-                        .padding(14.dp)
-                        .testTag("folder_card_${folder.name}")
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(42.dp)
-                                .neumorphic(
-                                    shape = RoundedCornerShape(10.dp),
-                                    level = NeumorphLevel.SMALL,
-                                    style = NeumorphStyle.RAISED,
-                                    lightShadowColorOverride = colors.lightShadow,
-                                    darkShadowColorOverride = colors.darkShadow,
-                                    backgroundColorOverride = colors.surface
-                                )
-                                .clip(RoundedCornerShape(10.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Folder,
-                                contentDescription = null,
-                                tint = colors.accent,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(14.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = folder.name,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = colors.textPrimary
-                            )
-                            Text(
-                                text = "${folder.trackCount} Lagu",
-                                fontSize = 12.sp,
-                                color = colors.textSecondary
-                            )
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(10.dp))
-            }
-        }
+        remember(isPlaying) { mutableFloatStateOf(if (isPlaying) 0.6f else 0.3f) }
     }
-}
 
-@Composable
-fun PlaylistsView(
-    playlists: List<PlaylistEntity>,
-    onPlaylistClick: (PlaylistEntity) -> Unit,
-    onDeletePlaylist: (PlaylistEntity) -> Unit,
-    onCreatePlaylist: () -> Unit
-) {
-    val colors = NeumorphicTheme.colors
+    val colors = AppThemeTokens.colors
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        if (playlists.isEmpty()) {
-            Column(
+    Box(
+        modifier = modifier.background(Color.Black.copy(alpha = 0.40f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(2.5.dp),
+            verticalAlignment = Alignment.Bottom,
+            modifier = Modifier.size(width = 18.dp, height = 18.dp)
+        ) {
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = "Belum ada playlist",
-                    fontSize = 14.sp,
-                    color = colors.textSecondary
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                NeumorphicChip(
-                    selected = false,
-                    onClick = onCreatePlaylist,
-                    label = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(stringResource(R.string.playlist_create))
-                        }
-                    }
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                items(playlists, key = { it.id }) { playlist ->
-                    val cardShape = RoundedCornerShape(NeumorphicTokens.RadiusMedium)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .neumorphic(
-                                shape = cardShape,
-                                level = NeumorphLevel.SMALL,
-                                style = NeumorphStyle.RAISED,
-                                lightShadowColorOverride = colors.lightShadow,
-                                darkShadowColorOverride = colors.darkShadow,
-                                backgroundColorOverride = colors.surface
-                            )
-                            .clip(cardShape)
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = { onPlaylistClick(playlist) }
-                            )
-                            .padding(horizontal = 16.dp, vertical = 10.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(42.dp)
-                                    .neumorphic(
-                                        shape = RoundedCornerShape(10.dp),
-                                        level = NeumorphLevel.SMALL,
-                                        style = NeumorphStyle.RAISED,
-                                        lightShadowColorOverride = colors.lightShadow,
-                                        darkShadowColorOverride = colors.darkShadow,
-                                        backgroundColorOverride = colors.surface
-                                    )
-                                    .clip(RoundedCornerShape(10.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.PlaylistPlay,
-                                    contentDescription = null,
-                                    tint = colors.accent,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(14.dp))
-
-                            Text(
-                                text = playlist.name,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = colors.textPrimary,
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            NeumorphicIconButton(
-                                onClick = { onDeletePlaylist(playlist) },
-                                size = 36.dp,
-                                level = NeumorphLevel.SMALL,
-                                contentDescription = stringResource(R.string.playlist_delete),
-                                icon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = null,
-                                        tint = colors.textSecondary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                },
-                                modifier = Modifier.testTag("delete_playlist_${playlist.id}")
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(10.dp))
-                }
-            }
-        }
-
-        // Circular Neumorphic FAB for Playlist Creation
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(bottom = 24.dp, end = 20.dp)
-        ) {
-            NeumorphicIconButton(
-                onClick = onCreatePlaylist,
-                size = 56.dp,
-                level = NeumorphLevel.LARGE,
-                contentDescription = stringResource(R.string.playlist_create),
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = null,
-                        tint = colors.accent,
-                        modifier = Modifier.size(26.dp)
-                    )
-                },
-                modifier = Modifier.testTag("create_playlist_fab")
+                    .weight(1f)
+                    .fillMaxHeight(height1)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(colors.accentText)
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(height2)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(colors.accentText)
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(height3)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(colors.accentText)
             )
         }
     }
 }
 
 /**
- * Detail Track list view for Album, Artist, Folder, and Playlist.
- * In Playlist detail:
- * - Back button is omitted.
- * - BackHandler navigates back to the playlist list.
- * - Header title is 16sp semi-bold, subtitle 12sp, left-aligned at 16dp horizontal padding.
- * - Songs support "Hapus dari Playlist" with undo Snackbar.
+ * Collection DETAIL screen (Album, Artist, Folder, Playlist):
+ * - Header like the reference: artwork ~96dp with 20dp radius on the left
+ * - Title 24sp Bold, subtitle 13sp textSecondary
+ * - Two equal-width pill buttons: "Putar" (AppPrimaryButton) and "Acak" (AppSecondaryButton)
  */
 @Composable
-fun DetailTrackListView(
+fun CollectionDetailView(
     title: String,
     subtitle: String,
+    artTarget: Any?,
     tracks: List<AudioTrack>,
     currentPlayingTrackUri: String?,
+    isPlaying: Boolean,
     playlists: List<PlaylistEntity>,
     onBack: () -> Unit,
     onPlayTrack: (AudioTrack) -> Unit,
+    onPlayAll: () -> Unit,
+    onShuffleAll: () -> Unit,
     onAddToQueue: (AudioTrack) -> Unit,
     onAddToPlaylist: (Long, AudioTrack) -> Unit,
     showBackButton: Boolean = true,
@@ -1219,7 +987,7 @@ fun DetailTrackListView(
     onDeletePermanently: ((AudioTrack) -> Unit)? = null,
     isDeletingTrack: Boolean = false
 ) {
-    val colors = NeumorphicTheme.colors
+    val colors = AppThemeTokens.colors
 
     BackHandler(onBack = onBack)
 
@@ -1228,71 +996,92 @@ fun DetailTrackListView(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                    .padding(horizontal = AppTokens.ScreenHorizontalPadding, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                NeumorphicIconButton(
+                AppIconButton(
                     onClick = onBack,
-                    size = 36.dp,
-                    level = NeumorphLevel.SMALL,
-                    contentDescription = "Kembali",
-                    icon = {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = null,
-                            tint = colors.textPrimary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.back),
+                    iconSize = 22.dp,
+                    tintOverride = colors.textPrimary
                 )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
+            }
+        }
+
+        // Collection Header (Matches Reference: 96dp artwork with 20dp radius on left, 24sp Bold title, Putar & Acak pill buttons)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = AppTokens.ScreenHorizontalPadding, vertical = 8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(96.dp)
+                        .clip(RoundedCornerShape(AppTokens.Radius20))
+                        .background(colors.surfaceMuted),
+                    contentAlignment = Alignment.Center
+                ) {
+                    MusicThumbnail(
+                        artTarget = artTarget?.toString(),
+                        contentDescription = title,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = title,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        style = AppTypography.collectionHeaderTitle,
                         color = colors.textPrimary,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-                    if (subtitle.isNotEmpty()) {
-                        Text(
-                            text = subtitle,
-                            fontSize = 12.sp,
-                            color = colors.textSecondary
-                        )
-                    }
-                }
-            }
-        } else {
-            // Clean left-aligned header matching list horizontal padding (16dp)
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
-            ) {
-                Text(
-                    text = title,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = colors.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (subtitle.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = subtitle,
-                        fontSize = 12.sp,
+                        style = AppTypography.listSubtitle,
                         color = colors.textSecondary
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Two Equal-Width Pill Buttons: "Putar" & "Acak"
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                AppPrimaryButton(
+                    text = stringResource(R.string.play),
+                    onClick = onPlayAll,
+                    icon = Icons.Default.PlayArrow,
+                    modifier = Modifier.weight(1f)
+                )
+
+                AppSecondaryButton(
+                    text = stringResource(R.string.shuffle_action),
+                    onClick = onShuffleAll,
+                    icon = Icons.Default.Shuffle,
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
 
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Tracks List
         SongsListView(
             tracks = tracks,
             currentPlayingTrackUri = currentPlayingTrackUri,
+            isPlaying = isPlaying,
             playlists = playlists,
             onPlayTrack = onPlayTrack,
             onAddToQueue = onAddToQueue,
@@ -1302,6 +1091,359 @@ fun DetailTrackListView(
             onDeletePermanently = onDeletePermanently,
             isDeletingTrack = isDeletingTrack,
             emptyMessage = if (currentPlaylistId != null) stringResource(R.string.playlist_empty) else stringResource(R.string.no_media_found)
+        )
+    }
+}
+
+@Composable
+fun AlbumsGridView(
+    albums: List<AlbumItem>,
+    gridState: LazyGridState = rememberLazyGridState(),
+    onAlbumClick: (AlbumItem) -> Unit
+) {
+    val colors = AppThemeTokens.colors
+
+    if (albums.isEmpty()) {
+        EmptyStateView(
+            icon = Icons.Default.MusicNote,
+            title = stringResource(R.string.no_media_found),
+            subtitle = stringResource(R.string.empty_music_list)
+        )
+    } else {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 145.dp),
+            state = gridState,
+            contentPadding = PaddingValues(20.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            items(albums, key = { it.title }) { album ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(AppTokens.Radius12))
+                        .clickable { onAlbumClick(album) }
+                        .testTag("album_card_${album.id}")
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(AppTokens.Radius16))
+                            .background(colors.surfaceMuted),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        MusicThumbnail(
+                            artTarget = album.albumArtUri,
+                            contentDescription = album.title,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = album.title,
+                        style = AppTypography.listTitle,
+                        color = colors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "${album.artist} • ${pluralStringResource(R.plurals.songs_count, album.trackCount, album.trackCount)}",
+                        style = AppTypography.listSubtitle,
+                        color = colors.textSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FoldersListView(
+    folders: List<FolderItem>,
+    listState: LazyListState = rememberLazyListState(),
+    onFolderClick: (FolderItem) -> Unit
+) {
+    val colors = AppThemeTokens.colors
+
+    if (folders.isEmpty()) {
+        EmptyStateView(
+            icon = Icons.Default.Folder,
+            title = stringResource(R.string.no_media_found),
+            subtitle = stringResource(R.string.empty_music_list)
+        )
+    } else {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 20.dp, top = 6.dp, end = 20.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            items(folders, key = { it.path }) { folder ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(AppTokens.Radius12))
+                        .clickable { onFolderClick(folder) }
+                        .padding(horizontal = 10.dp, vertical = 10.dp)
+                        .testTag("folder_card_${folder.name}"),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(AppTokens.Radius12))
+                            .background(colors.surfaceMuted),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Folder,
+                            contentDescription = null,
+                            tint = colors.textPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(14.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = folder.name,
+                            style = AppTypography.listTitle,
+                            color = colors.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = pluralStringResource(R.plurals.songs_count, folder.trackCount, folder.trackCount),
+                            style = AppTypography.listSubtitle,
+                            color = colors.textSecondary
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PlaylistsView(
+    playlists: List<PlaylistEntity>,
+    listState: LazyListState = rememberLazyListState(),
+    onPlaylistClick: (PlaylistEntity) -> Unit,
+    onDeletePlaylist: (PlaylistEntity) -> Unit,
+    onCreatePlaylist: () -> Unit
+) {
+    val colors = AppThemeTokens.colors
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (playlists.isEmpty()) {
+            EmptyStateView(
+                icon = Icons.Default.PlaylistPlay,
+                title = stringResource(R.string.playlist_none_title),
+                subtitle = stringResource(R.string.playlist_none_subtitle),
+                actionButton = {
+                    AppPrimaryButton(
+                        text = stringResource(R.string.playlist_create),
+                        onClick = onCreatePlaylist,
+                        icon = Icons.Default.Add
+                    )
+                }
+            )
+        } else {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 20.dp, top = 6.dp, end = 20.dp, bottom = 80.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                items(playlists, key = { it.id }) { playlist ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(AppTokens.Radius12))
+                            .clickable { onPlaylistClick(playlist) }
+                            .padding(horizontal = 10.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(AppTokens.Radius12))
+                                .background(colors.surfaceMuted),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlaylistPlay,
+                                contentDescription = null,
+                                tint = colors.textPrimary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(14.dp))
+
+                        Text(
+                            text = playlist.name,
+                            style = AppTypography.listTitle,
+                            color = colors.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        AppIconButton(
+                            onClick = { onDeletePlaylist(playlist) },
+                            icon = Icons.Default.Delete,
+                            contentDescription = stringResource(R.string.playlist_delete),
+                            iconSize = 20.dp,
+                            tintOverride = colors.textSecondary,
+                            testTag = "delete_playlist_${playlist.id}"
+                        )
+                    }
+                }
+            }
+        }
+
+        // Circular Flat FAB for Playlist Creation
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(bottom = 24.dp, end = 20.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(colors.primary)
+                    .clickable(onClick = onCreatePlaylist)
+                    .testTag("create_playlist_fab"),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = stringResource(R.string.playlist_create),
+                    tint = colors.onPrimary,
+                    modifier = Modifier.size(26.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Centered Minimal Empty State:
+ * 40dp line icon in textSecondary, one title line, one helper line, optional pill button. No cards.
+ */
+@Composable
+fun EmptyStateView(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    modifier: Modifier = Modifier,
+    actionButton: (@Composable () -> Unit)? = null
+) {
+    val colors = AppThemeTokens.colors
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = colors.textSecondary,
+            modifier = Modifier.size(40.dp)
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+        Text(
+            text = title,
+            style = AppTypography.screenTitle.copy(fontSize = 18.sp),
+            color = colors.textPrimary,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = subtitle,
+            style = AppTypography.body,
+            color = colors.textSecondary,
+            textAlign = TextAlign.Center,
+            lineHeight = 20.sp
+        )
+        if (actionButton != null) {
+            Spacer(modifier = Modifier.height(20.dp))
+            actionButton()
+        }
+    }
+}
+
+@Preview(name = "Music Tab - Lagu Light", showBackground = true, backgroundColor = 0xFFFFFFFF)
+@Composable
+fun MusicTabSongsLightPreview() {
+    LilithTheme(darkTheme = false) {
+        SongsListView(
+            tracks = listOf(
+                AudioTrack(id = 1, uri = "uri1", title = "To Speak Of Solitude", artist = "Brambles", durationMs = 261000, album = "Charcoal", albumId = 1, mimeType = "audio/mp3", path = "/music/song1.mp3", folderName = "Music"),
+                AudioTrack(id = 2, uri = "uri2", title = "Unsayable", artist = "Brambles", durationMs = 172000, album = "Charcoal", albumId = 1, mimeType = "audio/flac", path = "/music/song2.flac", folderName = "Music")
+            ),
+            currentPlayingTrackUri = "uri2",
+            isPlaying = true,
+            playlists = emptyList(),
+            onPlayTrack = {},
+            onAddToQueue = {},
+            onAddToPlaylist = { _, _ -> }
+        )
+    }
+}
+
+@Preview(name = "Music Tab - Album Dark", showBackground = true, backgroundColor = 0xFF0E1117)
+@Composable
+fun MusicTabAlbumsDarkPreview() {
+    LilithTheme(darkTheme = true) {
+        AlbumsGridView(
+            albums = listOf(
+                AlbumItem(id = 1, title = "Charcoal", artist = "Brambles", trackCount = 8, albumArtUri = null),
+                AlbumItem(id = 2, title = "Deep Focus", artist = "Ambient Collective", trackCount = 12, albumArtUri = null)
+            ),
+            onAlbumClick = {}
+        )
+    }
+}
+
+@Preview(name = "Music Tab - Folder Light", showBackground = true, backgroundColor = 0xFFFFFFFF)
+@Composable
+fun MusicTabFoldersLightPreview() {
+    LilithTheme(darkTheme = false) {
+        FoldersListView(
+            folders = listOf(
+                FolderItem(name = "Music", path = "/storage/emulated/0/Music", trackCount = 24),
+                FolderItem(name = "Downloads", path = "/storage/emulated/0/Download", trackCount = 5)
+            ),
+            onFolderClick = {}
+        )
+    }
+}
+
+@Preview(name = "Music Tab - Playlist Dark", showBackground = true, backgroundColor = 0xFF0E1117)
+@Composable
+fun MusicTabPlaylistsDarkPreview() {
+    LilithTheme(darkTheme = true) {
+        PlaylistsView(
+            playlists = listOf(
+                PlaylistEntity(id = 1, name = "Favorit", createdAt = 0),
+                PlaylistEntity(id = 2, name = "Chill Vibes", createdAt = 0)
+            ),
+            onPlaylistClick = {},
+            onDeletePlaylist = {},
+            onCreatePlaylist = {}
         )
     }
 }

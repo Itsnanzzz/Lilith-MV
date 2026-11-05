@@ -1,5 +1,6 @@
 package com.example.ui.music
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,10 +22,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -40,13 +41,18 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.model.AudioTrack
 import com.example.ui.common.TimeUtils
-import com.example.ui.theme.LocalNeumorphicColors
-import com.example.ui.theme.NeumorphLevel
-import com.example.ui.theme.NeumorphStyle
-import com.example.ui.theme.NeumorphicCard
-import com.example.ui.theme.NeumorphicIconButton
-import com.example.ui.theme.neumorphic
+import com.example.ui.theme.AppIconButton
+import com.example.ui.theme.AppThemeTokens
+import com.example.ui.theme.AppTokens
+import com.example.ui.theme.AppTypography
 
+/**
+ * Clean, flat Queue Bottom Sheet:
+ * - 24dp rounded top corners with flat drag handle
+ * - Clear queue action button
+ * - Clean row items with surfaceMuted highlight on the active playing song
+ * - Subtle reorder and remove buttons
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QueueSheet(
@@ -59,23 +65,21 @@ fun QueueSheet(
     onClearQueue: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val nc = LocalNeumorphicColors.current
+    val colors = AppThemeTokens.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = nc.background,
+        containerColor = colors.surface,
+        shape = RoundedCornerShape(topStart = AppTokens.Radius24, topEnd = AppTokens.Radius24),
         dragHandle = {
             Box(
                 modifier = Modifier
                     .padding(vertical = 12.dp)
-                    .size(width = 44.dp, height = 5.dp)
-                    .neumorphic(
-                        shape = CircleShape,
-                        level = NeumorphLevel.SMALL,
-                        style = NeumorphStyle.PRESSED
-                    )
+                    .size(width = 36.dp, height = 4.dp)
+                    .clip(RoundedCornerShape(AppTokens.RadiusPill))
+                    .background(colors.hairline)
             )
         }
     ) {
@@ -83,8 +87,9 @@ fun QueueSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(0.75f)
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = AppTokens.ScreenHorizontalPadding)
         ) {
+            // Header Row: Title & Clear Queue
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -93,46 +98,29 @@ fun QueueSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .neumorphic(
-                                shape = CircleShape,
-                                level = NeumorphLevel.SMALL,
-                                style = NeumorphStyle.RAISED
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MusicNote,
-                            contentDescription = null,
-                            tint = nc.accent,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.QueueMusic,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier.size(22.dp)
+                    )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = stringResource(R.string.queue_title) + " (${queue.size})",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = nc.textPrimary
+                        style = AppTypography.listTitle.copy(fontSize = 17.sp),
+                        color = colors.textPrimary
                     )
                 }
 
                 if (queue.isNotEmpty()) {
-                    NeumorphicIconButton(
+                    AppIconButton(
                         onClick = onClearQueue,
-                        level = NeumorphLevel.SMALL,
-                        size = 38.dp,
-                        modifier = Modifier.testTag("clear_queue_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.DeleteSweep,
-                            contentDescription = stringResource(R.string.clear_queue),
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                        icon = Icons.Default.DeleteSweep,
+                        contentDescription = stringResource(R.string.clear_queue),
+                        iconSize = 20.dp,
+                        tintOverride = colors.destructive,
+                        testTag = "clear_queue_button"
+                    )
                 }
             }
 
@@ -143,143 +131,124 @@ fun QueueSheet(
                         .weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
-                    NeumorphicCard(
-                        shape = RoundedCornerShape(20.dp),
-                        level = NeumorphLevel.SMALL,
-                        style = NeumorphStyle.PRESSED,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(24.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(32.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = stringResource(R.string.queue_empty),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = nc.textSecondary
-                            )
-                        }
-                    }
+                    Text(
+                        text = stringResource(R.string.queue_empty),
+                        style = AppTypography.body,
+                        color = colors.textSecondary
+                    )
                 }
             } else {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     itemsIndexed(
                         items = queue,
                         key = { index, item -> "queue_${item.uri}_$index" }
                     ) { index, track ->
                         val isCurrent = currentTrack?.uri == track.uri
+                        val rowShape = RoundedCornerShape(AppTokens.Radius12)
 
-                        NeumorphicCard(
-                            shape = RoundedCornerShape(16.dp),
-                            level = NeumorphLevel.SMALL,
-                            style = if (isCurrent) NeumorphStyle.PRESSED else NeumorphStyle.RAISED,
-                            modifier = Modifier.fillMaxWidth()
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(rowShape)
+                                .background(if (isCurrent) colors.surfaceMuted else colors.surface)
+                                .clickable { onTrackClick(index) }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
+                            // Track Number Index
+                            Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onTrackClick(index) }
-                                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .size(26.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isCurrent) colors.primary else colors.surfaceMuted),
+                                contentAlignment = Alignment.Center
                             ) {
-                                // Index badge
-                                Box(
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .neumorphic(
-                                            shape = CircleShape,
-                                            level = NeumorphLevel.SMALL,
-                                            style = if (isCurrent) NeumorphStyle.RAISED else NeumorphStyle.PRESSED
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "${index + 1}",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isCurrent) nc.accent else nc.textSecondary
-                                    )
-                                }
+                                Text(
+                                    text = "${index + 1}",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isCurrent) colors.onPrimary else colors.textSecondary
+                                )
+                            }
 
-                                Spacer(modifier = Modifier.width(12.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
 
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = track.title,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
-                                        color = if (isCurrent) nc.accent else nc.textPrimary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        text = "${track.artist} • ${TimeUtils.formatDuration(track.durationMs)}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = nc.textSecondary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
+                            // Track Title & Artist
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = track.title,
+                                    style = AppTypography.listTitle.copy(
+                                        fontSize = 14.sp,
+                                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold
+                                    ),
+                                    color = colors.textPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "${track.artist} • ${TimeUtils.formatDuration(track.durationMs)}",
+                                    style = AppTypography.caption,
+                                    color = colors.textSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
 
-                                Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
 
-                                // Reorder up
-                                NeumorphicIconButton(
-                                    onClick = { onMoveUp(index) },
-                                    enabled = index > 0,
-                                    level = NeumorphLevel.SMALL,
-                                    size = 32.dp
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.KeyboardArrowUp,
-                                        contentDescription = "Naik",
-                                        tint = if (index > 0) nc.textPrimary else nc.textSecondary.copy(alpha = 0.35f),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
+                            // Move Up
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .clickable(enabled = index > 0) { onMoveUp(index) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowUp,
+                                    contentDescription = stringResource(R.string.up),
+                                    tint = if (index > 0) colors.textPrimary else colors.textSecondary.copy(alpha = 0.3f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
 
-                                Spacer(modifier = Modifier.width(6.dp))
+                            // Move Down
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .clickable(enabled = index < queue.size - 1) { onMoveDown(index) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowDown,
+                                    contentDescription = stringResource(R.string.down),
+                                    tint = if (index < queue.size - 1) colors.textPrimary else colors.textSecondary.copy(alpha = 0.3f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
 
-                                // Reorder down
-                                NeumorphicIconButton(
-                                    onClick = { onMoveDown(index) },
-                                    enabled = index < queue.size - 1,
-                                    level = NeumorphLevel.SMALL,
-                                    size = 32.dp
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.KeyboardArrowDown,
-                                        contentDescription = "Turun",
-                                        tint = if (index < queue.size - 1) nc.textPrimary else nc.textSecondary.copy(alpha = 0.35f),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.width(6.dp))
-
-                                // Remove
-                                NeumorphicIconButton(
-                                    onClick = { onRemove(index) },
-                                    level = NeumorphLevel.SMALL,
-                                    size = 32.dp,
-                                    modifier = Modifier.testTag("remove_from_queue_$index")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "Hapus",
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
+                            // Remove
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .clickable { onRemove(index) }
+                                    .testTag("remove_from_queue_$index"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = stringResource(R.string.delete),
+                                    tint = colors.destructive,
+                                    modifier = Modifier.size(16.dp)
+                                )
                             }
                         }
                     }

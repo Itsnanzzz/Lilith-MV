@@ -10,10 +10,12 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.example.R
 import com.example.data.MusicSessionDataStore
 import com.example.data.MusicSessionSnapshot
 import com.example.data.model.AudioFormatInfo
 import com.example.data.model.AudioTrack
+import com.example.ui.common.getAppString
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.CoroutineScope
@@ -266,9 +268,9 @@ class MusicPlayerManager(private val context: Context) {
             AudioTrack(
                 id = currentMediaId.hashCode().toLong(),
                 uri = currentMediaId,
-                title = meta.title?.toString() ?: "Lagu",
-                artist = meta.artist?.toString() ?: "Artis Tidak Dikenal",
-                album = meta.albumTitle?.toString() ?: "Album",
+                title = meta.title?.toString() ?: context.getAppString(R.string.default_song_title),
+                artist = meta.artist?.toString() ?: context.getAppString(R.string.unknown_artist),
+                album = meta.albumTitle?.toString() ?: context.getAppString(R.string.default_album_title),
                 durationMs = mediaController?.duration?.coerceAtLeast(0L) ?: 0L,
                 albumArtUri = meta.artworkUri?.toString()
             )

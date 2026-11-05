@@ -7,17 +7,18 @@ import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.LilithApplication
+import com.example.R
 import com.example.data.DeleteTrackResult
 import com.example.data.MediaRepository
 import com.example.data.db.PlaylistEntity
 import com.example.data.db.PlaylistSongEntity
 import com.example.data.model.AlbumItem
-import com.example.data.model.ArtistItem
 import com.example.data.model.AudioTrack
 import com.example.data.model.FolderItem
 import com.example.playback.EqualizerState
 import com.example.playback.MusicPlaybackService
 import com.example.playback.MusicPlayerManager
+import com.example.ui.common.getAppString
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -30,7 +31,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 enum class MusicTab {
-    SONGS, ALBUMS, ARTISTS, FOLDERS, PLAYLISTS
+    SONGS, ALBUMS, FOLDERS, PLAYLISTS
 }
 
 sealed class MusicDeleteEvent {
@@ -45,10 +46,8 @@ data class MusicUiState(
     val allTracks: List<AudioTrack> = emptyList(),
     val filteredTracks: List<AudioTrack> = emptyList(),
     val albums: List<AlbumItem> = emptyList(),
-    val artists: List<ArtistItem> = emptyList(),
     val folders: List<FolderItem> = emptyList(),
     val selectedAlbum: AlbumItem? = null,
-    val selectedArtist: ArtistItem? = null,
     val selectedFolder: FolderItem? = null,
     val selectedPlaylist: PlaylistEntity? = null,
     val playlistSongs: List<AudioTrack> = emptyList(),
@@ -82,23 +81,35 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         MusicPlaybackService.serviceInstance?.equalizerController?.state
             ?: MutableStateFlow(EqualizerState())
 
+    private var loadedLocaleTag: String? = null
+
     init {
         scanMediaLibrary()
     }
 
+    fun syncLocale(languageTag: String) {
+        if (loadedLocaleTag != null && loadedLocaleTag != languageTag) {
+            loadedLocaleTag = languageTag
+            scanMediaLibrary()
+        } else {
+            loadedLocaleTag = languageTag
+        }
+    }
+
     fun scanMediaLibrary() {
         viewModelScope.launch {
+            loadedLocaleTag = com.example.ui.common.normalizeLanguageTag(
+                com.example.ui.common.getAppLocales(getApplication()).get(0)
+            )
             _uiState.value = _uiState.value.copy(isScanning = true)
             val tracks = repository.getAudioTracks()
             val albums = repository.groupIntoAlbums(tracks)
-            val artists = repository.groupIntoArtists(tracks)
             val folders = repository.groupIntoFolders(tracks)
 
             _uiState.value = _uiState.value.copy(
                 allTracks = tracks,
                 filteredTracks = filterTracks(tracks, _uiState.value.searchQuery),
                 albums = albums,
-                artists = artists,
                 folders = folders,
                 isScanning = false
             )
@@ -110,7 +121,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(
             selectedTab = tab,
             selectedAlbum = null,
-            selectedArtist = null,
             selectedFolder = null,
             selectedPlaylist = null
         )
@@ -135,10 +145,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectAlbum(album: AlbumItem?) {
         _uiState.value = _uiState.value.copy(selectedAlbum = album)
-    }
-
-    fun selectArtist(artist: ArtistItem?) {
-        _uiState.value = _uiState.value.copy(selectedArtist = artist)
     }
 
     fun selectFolder(folder: FolderItem?) {
@@ -170,6 +176,18 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         val listToPlay = playlist ?: _uiState.value.filteredTracks
         val index = listToPlay.indexOfFirst { it.uri == track.uri }
         playerManager.playTrackList(listToPlay, if (index >= 0) index else 0)
+    }
+
+    fun playAll(tracks: List<AudioTrack>) {
+        if (tracks.isNotEmpty()) {
+            playerManager.playTrackList(tracks, 0)
+        }
+    }
+
+    fun shuffleAll(tracks: List<AudioTrack>) {
+        if (tracks.isNotEmpty()) {
+            playerManager.playTrackList(tracks.shuffled(), 0)
+        }
     }
 
     fun openSafTrack(uri: Uri) {
@@ -292,7 +310,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 is DeleteTrackResult.Error -> {
                     _uiState.value = _uiState.value.copy(isDeletingTrack = false, trackToDelete = null)
-                    _deleteEvents.emit(MusicDeleteEvent.ShowMessage("Gagal menghapus lagu: ${result.message}"))
+                    _deleteEvents.emit(
+                        MusicDeleteEvent.ShowMessage(
+                            getApplication<Application>().getAppString(R.string.delete_failed_with_reason, result.message)
+                        )
+                    )
                 }
             }
         }
@@ -307,7 +329,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         onTrackDeletedSuccessfully(track)
                     } else {
                         _uiState.value = _uiState.value.copy(isDeletingTrack = false, trackToDelete = null)
-                        _deleteEvents.emit(MusicDeleteEvent.ShowMessage("Gagal menghapus lagu"))
+                        _deleteEvents.emit(
+                            MusicDeleteEvent.ShowMessage(
+                                getApplication<Application>().getAppString(R.string.delete_failed)
+                            )
+                        )
                     }
                 } else {
                     onTrackDeletedSuccessfully(track)
@@ -324,7 +350,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             _uiState.value = _uiState.value.copy(isDeletingTrack = false, trackToDelete = null)
             viewModelScope.launch {
-                _deleteEvents.emit(MusicDeleteEvent.ShowMessage("Izin penyimpanan diperlukan untuk menghapus berkas"))
+                _deleteEvents.emit(
+                    MusicDeleteEvent.ShowMessage(
+                        getApplication<Application>().getAppString(R.string.storage_permission_required)
+                    )
+                )
             }
         }
     }
@@ -341,16 +371,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             val updatedAll = _uiState.value.allTracks.filter { it.uri != track.uri }
             val updatedFiltered = filterTracks(updatedAll, _uiState.value.searchQuery)
 
-            // 4. Update groupings and counters; empty albums/artists/folders automatically excluded
+            // 4. Update groupings and counters; empty albums/folders automatically excluded
             val updatedAlbums = repository.groupIntoAlbums(updatedAll)
-            val updatedArtists = repository.groupIntoArtists(updatedAll)
             val updatedFolders = repository.groupIntoFolders(updatedAll)
 
             val updatedSelectedAlbum = _uiState.value.selectedAlbum?.let { album ->
                 updatedAlbums.find { it.title == album.title }
-            }
-            val updatedSelectedArtist = _uiState.value.selectedArtist?.let { artist ->
-                updatedArtists.find { it.name == artist.name }
             }
             val updatedSelectedFolder = _uiState.value.selectedFolder?.let { folder ->
                 updatedFolders.find { it.name == folder.name }
@@ -361,17 +387,19 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 allTracks = updatedAll,
                 filteredTracks = updatedFiltered,
                 albums = updatedAlbums,
-                artists = updatedArtists,
                 folders = updatedFolders,
                 selectedAlbum = updatedSelectedAlbum,
-                selectedArtist = updatedSelectedArtist,
                 selectedFolder = updatedSelectedFolder,
                 playlistSongs = updatedPlaylistSongs,
                 isDeletingTrack = false,
                 trackToDelete = null
             )
 
-            _deleteEvents.emit(MusicDeleteEvent.ShowMessage("Lagu dihapus"))
+            _deleteEvents.emit(
+                MusicDeleteEvent.ShowMessage(
+                    getApplication<Application>().getAppString(R.string.song_deleted)
+                )
+            )
         }
     }
 

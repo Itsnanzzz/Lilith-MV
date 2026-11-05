@@ -17,10 +17,16 @@ enum class ThemeMode {
     SYSTEM, DARK, LIGHT
 }
 
+enum class AppAccent {
+    WHITE, BLUE, GREEN, YELLOW, RED, ORANGE, PURPLE
+}
+
+
 class SettingsDataStore(private val context: Context) {
 
     private object PreferencesKeys {
         val THEME_MODE = stringPreferencesKey("theme_mode")
+        val ACCENT_COLOR = stringPreferencesKey("accent_color")
         val GAPLESS_PLAYBACK = booleanPreferencesKey("gapless_playback")
         val PAUSE_ON_HEADSET_UNPLUG = booleanPreferencesKey("pause_on_headset_unplug")
         val PREFERRED_SUBTITLE_LANG = stringPreferencesKey("preferred_subtitle_lang")
@@ -35,6 +41,15 @@ class SettingsDataStore(private val context: Context) {
             ThemeMode.valueOf(name)
         } catch (e: Exception) {
             ThemeMode.SYSTEM
+        }
+    }
+
+    val accentColorFlow: Flow<AppAccent> = context.dataStore.data.map { preferences ->
+        val name = preferences[PreferencesKeys.ACCENT_COLOR] ?: AppAccent.WHITE.name
+        try {
+            AppAccent.valueOf(name)
+        } catch (e: Exception) {
+            AppAccent.WHITE
         }
     }
 
@@ -62,6 +77,12 @@ class SettingsDataStore(private val context: Context) {
     suspend fun setThemeMode(mode: ThemeMode) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.THEME_MODE] = mode.name
+        }
+    }
+
+    suspend fun setAccentColor(accent: AppAccent) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.ACCENT_COLOR] = accent.name
         }
     }
 

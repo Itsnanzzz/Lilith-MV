@@ -27,9 +27,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -48,14 +46,16 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.model.SubtitleSettings
 import com.example.data.model.SubtitleTrackInfo
-import com.example.ui.theme.LocalNeumorphicColors
-import com.example.ui.theme.NeumorphLevel
-import com.example.ui.theme.NeumorphStyle
-import com.example.ui.theme.NeumorphicCard
-import com.example.ui.theme.NeumorphicIconButton
-import com.example.ui.theme.NeumorphicSlider
-import com.example.ui.theme.neumorphic
+import com.example.ui.theme.AppPrimaryButton
+import com.example.ui.theme.AppSecondaryButton
+import com.example.ui.theme.AppSlider
+import com.example.ui.theme.AppThemeTokens
+import com.example.ui.theme.AppTokens
+import com.example.ui.theme.AppTypography
 
+/**
+ * Clean Flat Subtitle Track Selection Dialog.
+ */
 @Composable
 fun SubtitleTrackDialog(
     tracks: List<SubtitleTrackInfo>,
@@ -65,9 +65,8 @@ fun SubtitleTrackDialog(
     onOpenSettings: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val nc = LocalNeumorphicColors.current
+    val colors = AppThemeTokens.colors
 
-    // SAF picker for external subtitle file
     val safSubLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
@@ -80,8 +79,8 @@ fun SubtitleTrackDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = nc.background,
-        shape = RoundedCornerShape(24.dp),
+        containerColor = colors.surface,
+        shape = RoundedCornerShape(AppTokens.Radius24),
         title = {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -89,41 +88,32 @@ fun SubtitleTrackDialog(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .neumorphic(
-                                shape = CircleShape,
-                                level = NeumorphLevel.SMALL,
-                                style = NeumorphStyle.RAISED
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Subtitles,
-                            contentDescription = null,
-                            tint = nc.accent,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.Subtitles,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier.size(22.dp)
+                    )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = stringResource(R.string.subtitle_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = nc.textPrimary
+                        style = AppTypography.screenTitle.copy(fontSize = 18.sp),
+                        color = colors.textPrimary
                     )
                 }
 
-                NeumorphicIconButton(
-                    onClick = onOpenSettings,
-                    size = 38.dp,
-                    level = NeumorphLevel.SMALL
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(colors.surfaceMuted)
+                        .clickable(onClick = onOpenSettings),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Settings,
                         contentDescription = stringResource(R.string.subtitle_settings),
-                        tint = nc.textSecondary,
+                        tint = colors.textPrimary,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -131,65 +121,47 @@ fun SubtitleTrackDialog(
         },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                // ASS/SSA Note
                 Text(
                     text = stringResource(R.string.subtitle_ass_note),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = nc.textSecondary,
+                    style = AppTypography.caption,
+                    color = colors.textSecondary,
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
 
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     // Option: OFF
                     item {
                         val isOffSelected = selectedId == null
-                        NeumorphicCard(
-                            shape = RoundedCornerShape(14.dp),
-                            level = NeumorphLevel.SMALL,
-                            style = if (isOffSelected) NeumorphStyle.PRESSED else NeumorphStyle.RAISED,
+                        val itemShape = RoundedCornerShape(AppTokens.Radius12)
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .clip(itemShape)
+                                .background(if (isOffSelected) colors.surfaceMuted else Color.Transparent)
                                 .clickable {
                                     onSelectTrack(null)
                                     onDismiss()
                                 }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(22.dp)
-                                        .neumorphic(
-                                            shape = CircleShape,
-                                            level = NeumorphLevel.SMALL,
-                                            style = if (isOffSelected) NeumorphStyle.RAISED else NeumorphStyle.PRESSED
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (isOffSelected) {
-                                        Icon(
-                                            imageVector = Icons.Default.Check,
-                                            contentDescription = null,
-                                            tint = nc.accent,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.width(12.dp))
-
-                                Text(
-                                    text = stringResource(R.string.subtitle_none),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = if (isOffSelected) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isOffSelected) nc.accent else nc.textPrimary
+                            Text(
+                                text = stringResource(R.string.subtitle_none),
+                                style = AppTypography.body.copy(
+                                    fontWeight = if (isOffSelected) FontWeight.Bold else FontWeight.Normal
+                                ),
+                                color = colors.textPrimary
+                            )
+                            if (isOffSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = colors.primary,
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
@@ -198,60 +170,43 @@ fun SubtitleTrackDialog(
                     // Available Subtitle Tracks
                     items(tracks) { track ->
                         val isSelected = track.id == selectedId || track.isSelected
-                        NeumorphicCard(
-                            shape = RoundedCornerShape(14.dp),
-                            level = NeumorphLevel.SMALL,
-                            style = if (isSelected) NeumorphStyle.PRESSED else NeumorphStyle.RAISED,
+                        val itemShape = RoundedCornerShape(AppTokens.Radius12)
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .clip(itemShape)
+                                .background(if (isSelected) colors.surfaceMuted else Color.Transparent)
                                 .clickable {
                                     onSelectTrack(track.id)
                                     onDismiss()
                                 }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(22.dp)
-                                        .neumorphic(
-                                            shape = CircleShape,
-                                            level = NeumorphLevel.SMALL,
-                                            style = if (isSelected) NeumorphStyle.RAISED else NeumorphStyle.PRESSED
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (isSelected) {
-                                        Icon(
-                                            imageVector = Icons.Default.Check,
-                                            contentDescription = null,
-                                            tint = nc.accent,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.width(12.dp))
-
-                                Column(modifier = Modifier.weight(1f)) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = track.label,
+                                    style = AppTypography.body.copy(
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    ),
+                                    color = colors.textPrimary
+                                )
+                                if (track.isExternal) {
                                     Text(
-                                        text = track.label,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (isSelected) nc.accent else nc.textPrimary
+                                        text = stringResource(R.string.subtitle_external_file),
+                                        style = AppTypography.caption,
+                                        color = colors.textSecondary
                                     )
-                                    if (track.isExternal) {
-                                        Text(
-                                            text = "Berkas Eksternal",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = nc.textSecondary
-                                        )
-                                    }
                                 }
+                            }
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = colors.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
                         }
                     }
@@ -260,64 +215,45 @@ fun SubtitleTrackDialog(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 // Button to add external file
-                NeumorphicCard(
-                    shape = RoundedCornerShape(14.dp),
-                    level = NeumorphLevel.SMALL,
-                    style = NeumorphStyle.RAISED,
+                AppSecondaryButton(
+                    text = stringResource(R.string.subtitle_add_external),
+                    icon = Icons.Default.Add,
+                    onClick = {
+                        safSubLauncher.launch(
+                            arrayOf(
+                                "application/x-subrip",
+                                "text/vtt",
+                                "text/x-ssa",
+                                "text/plain",
+                                "*/*"
+                            )
+                        )
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable {
-                            safSubLauncher.launch(
-                                arrayOf(
-                                    "application/x-subrip",
-                                    "text/vtt",
-                                    "text/x-ssa",
-                                    "text/plain",
-                                    "*/*"
-                                )
-                            )
-                        }
                         .testTag("add_external_subtitle_button")
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp, horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = null,
-                            tint = nc.accent,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(R.string.subtitle_add_external),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = nc.accent
-                        )
-                    }
-                }
+                )
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Tutup", color = nc.accent, fontWeight = FontWeight.Bold)
-            }
+            AppPrimaryButton(
+                text = stringResource(R.string.close),
+                onClick = onDismiss
+            )
         }
     )
 }
 
+/**
+ * Clean Flat Subtitle Customization Dialog.
+ */
 @Composable
 fun SubtitleSettingsDialog(
     settings: SubtitleSettings,
     onSave: (SubtitleSettings) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val nc = LocalNeumorphicColors.current
+    val colors = AppThemeTokens.colors
 
     var fontSize by remember { mutableFloatStateOf(settings.fontSizeSp) }
     var textColorHex by remember { mutableFloatStateOf(settings.textColorHex.toFloat()) }
@@ -329,55 +265,39 @@ fun SubtitleSettingsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = nc.background,
-        shape = RoundedCornerShape(24.dp),
+        containerColor = colors.surface,
+        shape = RoundedCornerShape(AppTokens.Radius24),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .neumorphic(
-                            shape = CircleShape,
-                            level = NeumorphLevel.SMALL,
-                            style = NeumorphStyle.RAISED
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = null,
-                        tint = nc.accent,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = null,
+                    tint = colors.primary,
+                    modifier = Modifier.size(22.dp)
+                )
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = stringResource(R.string.subtitle_settings),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = nc.textPrimary
+                    style = AppTypography.screenTitle.copy(fontSize = 18.sp),
+                    color = colors.textPrimary
                 )
             }
         },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                // Live Subtitle Preview Box (Inset style)
+                // Live Subtitle Preview Box
                 Text(
-                    text = "Pratinjau Langsung",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = nc.textSecondary
+                    text = stringResource(R.string.subtitle_live_preview),
+                    style = AppTypography.label,
+                    color = colors.textSecondary
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(68.dp)
-                        .neumorphic(
-                            shape = RoundedCornerShape(14.dp),
-                            level = NeumorphLevel.SMALL,
-                            style = NeumorphStyle.PRESSED
-                        )
-                        .background(Color.Black.copy(alpha = 0.85f))
+                        .height(64.dp)
+                        .clip(RoundedCornerShape(AppTokens.Radius12))
+                        .background(Color.Black)
                         .padding(8.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -389,7 +309,7 @@ fun SubtitleSettingsDialog(
                             .padding(horizontal = 8.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = "Lilith MV — Contoh Teks Subtitle",
+                            text = stringResource(R.string.subtitle_sample_text),
                             color = Color(textColorHex.toInt()),
                             fontSize = fontSize.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -407,37 +327,35 @@ fun SubtitleSettingsDialog(
                 ) {
                     Text(
                         text = stringResource(R.string.subtitle_font_size),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = nc.textPrimary
+                        style = AppTypography.label,
+                        color = colors.textPrimary
                     )
                     Text(
                         text = "${fontSize.toInt()} sp",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = nc.accent
+                        style = AppTypography.label,
+                        color = colors.primary
                     )
                 }
-                NeumorphicSlider(
-                    value = fontSize,
-                    onValueChange = { fontSize = it },
-                    valueRange = 12f..32f,
-                    modifier = Modifier.padding(top = 4.dp),
+                AppSlider(
+                    value = ((fontSize - 12f) / 20f).coerceIn(0f, 1f),
+                    onValueChange = { frac -> fontSize = 12f + frac * 20f },
+                    modifier = Modifier.padding(top = 2.dp),
                     testTag = "subtitle_size_slider"
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // Text Color choices
                 Text(
                     text = stringResource(R.string.subtitle_color),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = nc.textPrimary
+                    style = AppTypography.label,
+                    color = colors.textPrimary
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 val colorChoices = listOf(
-                    0xFFFFFFFFL to "Putih",
-                    0xFFFFEB3BL to "Kuning",
-                    0xFF00E5FFL to "Cyan"
+                    0xFFFFFFFFL to stringResource(R.string.subtitle_color_white),
+                    0xFFFFEB3BL to stringResource(R.string.subtitle_color_yellow),
+                    0xFF00E5FFL to stringResource(R.string.subtitle_color_cyan)
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -445,27 +363,21 @@ fun SubtitleSettingsDialog(
                 ) {
                     colorChoices.forEach { (colorHex, name) ->
                         val isSelected = textColorHex.toLong() == colorHex
-                        NeumorphicCard(
-                            shape = RoundedCornerShape(12.dp),
-                            level = NeumorphLevel.SMALL,
-                            style = if (isSelected) NeumorphStyle.PRESSED else NeumorphStyle.RAISED,
+                        Box(
                             modifier = Modifier
                                 .weight(1f)
+                                .clip(RoundedCornerShape(AppTokens.RadiusPill))
+                                .background(if (isSelected) colors.surfaceMuted else Color.Transparent)
                                 .clickable { textColorHex = colorHex.toFloat() }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 10.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = name,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    color = Color(colorHex)
-                                )
-                            }
+                            Text(
+                                text = name,
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = Color(colorHex)
+                            )
                         }
                     }
                 }
@@ -479,25 +391,23 @@ fun SubtitleSettingsDialog(
                 ) {
                     Text(
                         text = stringResource(R.string.subtitle_background),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = nc.textPrimary
+                        style = AppTypography.label,
+                        color = colors.textPrimary
                     )
                     Text(
                         text = "${(bgAlpha * 100).toInt()}%",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = nc.accent
+                        style = AppTypography.label,
+                        color = colors.primary
                     )
                 }
-                NeumorphicSlider(
+                AppSlider(
                     value = bgAlpha,
                     onValueChange = { bgAlpha = it },
-                    valueRange = 0f..1f,
-                    modifier = Modifier.padding(top = 4.dp),
+                    modifier = Modifier.padding(top = 2.dp),
                     testTag = "subtitle_bg_opacity_slider"
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // Delay Adjustment
                 Row(
@@ -507,132 +417,112 @@ fun SubtitleSettingsDialog(
                 ) {
                     Text(
                         text = stringResource(R.string.subtitle_delay),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = nc.textPrimary
+                        style = AppTypography.label,
+                        color = colors.textPrimary
                     )
                     Text(
                         text = stringResource(R.string.subtitle_delay_seconds, delaySec),
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = nc.accent
+                        style = AppTypography.label,
+                        color = colors.primary
                     )
                 }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 8.dp),
+                        .padding(top = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    NeumorphicCard(
-                        shape = RoundedCornerShape(12.dp),
-                        level = NeumorphLevel.SMALL,
-                        style = NeumorphStyle.RAISED,
+                    Box(
                         modifier = Modifier
                             .weight(1f)
+                            .clip(RoundedCornerShape(AppTokens.RadiusPill))
+                            .background(colors.surfaceMuted)
                             .clickable { delaySec -= 0.5f }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                            Text("-0.5s", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = nc.textPrimary)
-                        }
+                        Text("-0.5s", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
                     }
-                    NeumorphicCard(
-                        shape = RoundedCornerShape(12.dp),
-                        level = NeumorphLevel.SMALL,
-                        style = NeumorphStyle.PRESSED,
+                    Box(
                         modifier = Modifier
                             .weight(1f)
+                            .clip(RoundedCornerShape(AppTokens.RadiusPill))
+                            .background(colors.surfaceMuted)
                             .clickable { delaySec = 0f }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                            Text("Reset", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = nc.accent)
-                        }
+                        Text(stringResource(R.string.reset), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.primary)
                     }
-                    NeumorphicCard(
-                        shape = RoundedCornerShape(12.dp),
-                        level = NeumorphLevel.SMALL,
-                        style = NeumorphStyle.RAISED,
+                    Box(
                         modifier = Modifier
                             .weight(1f)
+                            .clip(RoundedCornerShape(AppTokens.RadiusPill))
+                            .background(colors.surfaceMuted)
                             .clickable { delaySec += 0.5f }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                            Text("+0.5s", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = nc.textPrimary)
-                        }
+                        Text("+0.5s", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(
-                onClick = {
-                    val alphaByte = (bgAlpha * 255).toLong() shl 24
-                    val newBg = alphaByte or 0x000000L
-                    onSave(
-                        SubtitleSettings(
-                            fontSizeSp = fontSize,
-                            textColorHex = textColorHex.toLong(),
-                            backgroundColorHex = newBg,
-                            delayMs = (delaySec * 1000).toLong()
-                        )
-                    )
-                    onDismiss()
-                }
-            ) {
-                Text(
-                    text = stringResource(R.string.playlist_save),
-                    color = nc.accent,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppSecondaryButton(
                     text = stringResource(R.string.playlist_cancel),
-                    color = nc.textSecondary
+                    onClick = onDismiss
+                )
+                AppPrimaryButton(
+                    text = stringResource(R.string.playlist_save),
+                    onClick = {
+                        val alphaByte = (bgAlpha * 255).toLong() shl 24
+                        val newBg = alphaByte or 0x000000L
+                        onSave(
+                            SubtitleSettings(
+                                fontSizeSp = fontSize,
+                                textColorHex = textColorHex.toLong(),
+                                backgroundColorHex = newBg,
+                                delayMs = (delaySec * 1000).toLong()
+                            )
+                        )
+                        onDismiss()
+                    }
                 )
             }
         }
     )
 }
 
+/**
+ * Clean Flat Audio Track Selection Dialog.
+ */
 @Composable
 fun AudioTrackDialog(
     audioTracks: List<AudioTrackChoice>,
     onSelectTrack: (AudioTrackChoice) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val nc = LocalNeumorphicColors.current
+    val colors = AppThemeTokens.colors
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = nc.background,
-        shape = RoundedCornerShape(24.dp),
+        containerColor = colors.surface,
+        shape = RoundedCornerShape(AppTokens.Radius24),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .neumorphic(
-                            shape = CircleShape,
-                            level = NeumorphLevel.SMALL,
-                            style = NeumorphStyle.RAISED
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Audiotrack,
-                        contentDescription = null,
-                        tint = nc.accent,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.Audiotrack,
+                    contentDescription = null,
+                    tint = colors.primary,
+                    modifier = Modifier.size(22.dp)
+                )
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = stringResource(R.string.audio_tracks),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = nc.textPrimary
+                    style = AppTypography.screenTitle.copy(fontSize = 18.sp),
+                    color = colors.textPrimary
                 )
             }
         },
@@ -641,59 +531,42 @@ fun AudioTrackDialog(
                 if (audioTracks.isEmpty()) {
                     Text(
                         text = stringResource(R.string.audio_track_default),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = nc.textSecondary
+                        style = AppTypography.body,
+                        color = colors.textSecondary
                     )
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         items(audioTracks) { choice ->
-                            NeumorphicCard(
-                                shape = RoundedCornerShape(14.dp),
-                                level = NeumorphLevel.SMALL,
-                                style = if (choice.isSelected) NeumorphStyle.PRESSED else NeumorphStyle.RAISED,
+                            val itemShape = RoundedCornerShape(AppTokens.Radius12)
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .clip(itemShape)
+                                    .background(if (choice.isSelected) colors.surfaceMuted else Color.Transparent)
                                     .clickable {
                                         onSelectTrack(choice)
                                         onDismiss()
                                     }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(22.dp)
-                                            .neumorphic(
-                                                shape = CircleShape,
-                                                level = NeumorphLevel.SMALL,
-                                                style = if (choice.isSelected) NeumorphStyle.RAISED else NeumorphStyle.PRESSED
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        if (choice.isSelected) {
-                                            Icon(
-                                                imageVector = Icons.Default.Check,
-                                                contentDescription = null,
-                                                tint = nc.accent,
-                                                modifier = Modifier.size(14.dp)
-                                            )
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.width(12.dp))
-
-                                    Text(
-                                        text = choice.name,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = if (choice.isSelected) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (choice.isSelected) nc.accent else nc.textPrimary
+                                Text(
+                                    text = choice.name,
+                                    style = AppTypography.body.copy(
+                                        fontWeight = if (choice.isSelected) FontWeight.Bold else FontWeight.Normal
+                                    ),
+                                    color = colors.textPrimary
+                                )
+                                if (choice.isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = colors.primary,
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
                             }
@@ -703,9 +576,10 @@ fun AudioTrackDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Tutup", color = nc.accent, fontWeight = FontWeight.Bold)
-            }
+            AppPrimaryButton(
+                text = stringResource(R.string.close),
+                onClick = onDismiss
+            )
         }
     )
 }

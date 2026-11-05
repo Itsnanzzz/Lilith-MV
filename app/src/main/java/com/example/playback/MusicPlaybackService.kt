@@ -1,7 +1,10 @@
 package com.example.playback
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -20,9 +23,11 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
+import com.example.LilithApplication
 import com.example.MainActivity
 import com.example.R
 import com.example.data.model.AudioFormatInfo
+import com.example.ui.common.getAppString
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 
@@ -40,6 +45,17 @@ class MusicPlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                LilithApplication.CHANNEL_ID_PLAYBACK,
+                getAppString(R.string.notification_channel_name),
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = getAppString(R.string.notification_channel_desc)
+                setShowBadge(false)
+            }
+            getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
+        }
 
         val audioAttributes = AudioAttributes.Builder()
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
@@ -82,8 +98,8 @@ class MusicPlaybackService : MediaSessionService() {
                 Handler(Looper.getMainLooper()).post {
                     Toast.makeText(
                         applicationContext,
-                        applicationContext.getString(R.string.error_unsupported_codec) + " " +
-                                applicationContext.getString(R.string.error_skipping_next),
+                        getAppString(R.string.error_unsupported_codec) + " " +
+                                getAppString(R.string.error_skipping_next),
                         Toast.LENGTH_LONG
                     ).show()
                 }

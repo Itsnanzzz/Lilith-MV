@@ -4,7 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -43,6 +43,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +54,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.data.ThemeMode
+import com.example.data.AppAccent
+import com.example.ui.common.getAppLocales
+import com.example.ui.common.normalizeLanguageTag
 import com.example.ui.common.PermissionView
 import com.example.ui.music.EqualizerDialog
 import com.example.ui.music.MiniPlayer
@@ -77,7 +81,7 @@ enum class MainNavigationTab {
     MUSIC, VIDEO, SETTINGS
 }
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
 
     private val musicViewModel: MusicViewModel by viewModels()
     private val videoLibraryViewModel: VideoLibraryViewModel by viewModels()
@@ -86,6 +90,22 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.example.ui.common.logLangDebug(this, "MainActivity.onCreate.entry(savedInstance=${savedInstanceState != null})")
+
+        val appLocales = getAppLocales(this)
+        val targetLang = if (!appLocales.isEmpty) {
+            normalizeLanguageTag(appLocales.get(0))
+        } else {
+            "id"
+        }
+        val currentConfigLang = normalizeLanguageTag(resources.configuration.locales.get(0))
+        if (currentConfigLang != targetLang && lastSyncedLocaleTag != targetLang) {
+            lastSyncedLocaleTag = targetLang
+            recreate()
+            return
+        }
+        lastSyncedLocaleTag = targetLang
+
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(
                 android.graphics.Color.TRANSPARENT,
@@ -100,15 +120,21 @@ class MainActivity : ComponentActivity() {
             window.isNavigationBarContrastEnforced = false
         }
 
+        if (savedInstanceState != null) {
+            musicViewModel.syncLocale(currentConfigLang)
+            videoLibraryViewModel.syncLocale(currentConfigLang)
+        }
+
         setContent {
-            val themeMode by settingsViewModel.themeMode.collectAsState()
+            val themeMode by settingsViewModel.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
+            val appAccent by settingsViewModel.appAccent.collectAsState(initial = AppAccent.WHITE)
             val isDark = when (themeMode) {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
                 ThemeMode.DARK -> true
                 ThemeMode.LIGHT -> false
             }
 
-            LilithTheme(darkTheme = isDark) {
+            LilithTheme(darkTheme = isDark, appAccent = appAccent) {
                 MainAppContainer(
                     musicViewModel = musicViewModel,
                     videoLibraryViewModel = videoLibraryViewModel,
@@ -116,6 +142,15 @@ class MainActivity : ComponentActivity() {
                     settingsViewModel = settingsViewModel
                 )
             }
+        }
+    }
+
+    companion object {
+        @Volatile
+        private var lastSyncedLocaleTag: String? = null
+
+        fun clearLastSyncedLocaleTag() {
+            lastSyncedLocaleTag = null
         }
     }
 }
@@ -172,7 +207,7 @@ fun MainAppContainer(
         return
     }
 
-    var currentTab by remember { mutableStateOf(MainNavigationTab.MUSIC) }
+    var currentTab by rememberSaveable { mutableStateOf(MainNavigationTab.MUSIC) }
 
     val musicUiState by musicViewModel.uiState.collectAsState()
     val videoLibUiState by videoLibraryViewModel.uiState.collectAsState()

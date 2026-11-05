@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
@@ -63,22 +65,21 @@ import com.example.data.model.AudioFormatInfo
 import com.example.data.model.AudioTrack
 import com.example.ui.common.MediaFormatBadge
 import com.example.ui.common.MusicThumbnail
+import com.example.ui.theme.AppThemeTokens
+import com.example.ui.theme.AppTokens
+import com.example.ui.theme.AppTypography
 import com.example.ui.theme.LilithTheme
-import com.example.ui.theme.NeumorphLevel
-import com.example.ui.theme.NeumorphStyle
-import com.example.ui.theme.NeumorphicIconButton
-import com.example.ui.theme.NeumorphicTheme
-import com.example.ui.theme.neumorphic
 
 /**
- * Global toggle to easily switch navigation between label + icon and modern icon-only.
+ * Global toggle to control label visibility on navigation bar.
  */
 const val SHOW_NAV_LABELS = true
 
 /**
- * Unified Docked Bottom Panel combining the mini player row on top and the navigation bar below.
- * Completely straight, edge-to-edge rectangular panel (0dp radius) with a crisp 1dp hairline divider
- * at the top edge and surface background extending fully behind the system navigation bar.
+ * Clean, flat Unified Docked Bottom Panel combining:
+ * 1. Mini player row inside a sleek dark rounded card (matching reference layout).
+ * 2. 3-tab navigation bar (Musik, Video, Pengaturan).
+ * Completely straight, edge-to-edge rectangular panel (0dp radius) with a 1dp hairline divider at top.
  */
 @Composable
 fun UnifiedDockedBottomBar(
@@ -94,7 +95,7 @@ fun UnifiedDockedBottomBar(
     onClickMiniPlayer: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val colors = NeumorphicTheme.colors
+    val colors = AppThemeTokens.colors
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
 
@@ -105,7 +106,7 @@ fun UnifiedDockedBottomBar(
                 android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,
                 1f
             ) == 0f
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     }
@@ -116,18 +117,11 @@ fun UnifiedDockedBottomBar(
         tween(durationMillis = 200, easing = FastOutSlowInEasing)
     }
 
-    // Crisp 1dp hairline divider: darker tone in light theme, subtle lighter tone in dark theme
-    val hairlineColor = if (colors.isDark) {
-        colors.miniPlayerLightShadow.copy(alpha = 0.40f)
-    } else {
-        colors.miniPlayerDarkShadow.copy(alpha = 0.38f)
-    }
-
     Box(
         modifier = modifier
             .fillMaxWidth()
             .clip(RectangleShape)
-            .background(colors.miniPlayerSurface, RectangleShape)
+            .background(colors.surface, RectangleShape)
             .testTag("docked_bottom_panel")
     ) {
         Column(
@@ -143,150 +137,146 @@ fun UnifiedDockedBottomBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(1.dp)
-                    .background(hairlineColor)
+                    .background(colors.hairline)
             )
 
-            // 1. Mini player row & progress line (only visible when a song exists)
+            // 1. Mini Player Card (Only visible when a song exists)
+            // Matches Reference: Dark rounded pill/card with album art, title, artist, play/pause circle, next icon, and progress line
             if (currentTrack != null) {
-                // Mini Player Clickable Row
-                Row(
+                val cardShape = RoundedCornerShape(AppTokens.Radius16)
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .clip(cardShape)
+                        .background(colors.miniPlayerSurface)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
                             onClick = onClickMiniPlayer
                         )
-                        .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 6.dp)
-                        .testTag("mini_player"),
-                    verticalAlignment = Alignment.CenterVertically
+                        .testTag("mini_player")
                 ) {
-                    // Album Art Container (~44dp, rounded 12dp with raised well)
-                    val artShape = RoundedCornerShape(12.dp)
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .neumorphic(
-                                shape = artShape,
-                                level = NeumorphLevel.SMALL,
-                                style = NeumorphStyle.RAISED,
-                                lightShadowColorOverride = colors.miniPlayerLightShadow,
-                                darkShadowColorOverride = colors.miniPlayerDarkShadow,
-                                backgroundColorOverride = colors.miniPlayerSurface
-                            )
-                            .clip(artShape)
-                            .padding(2.dp)
-                            .clip(RoundedCornerShape(10.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val artTarget = currentTrack.albumArtUri?.takeIf { it.isNotBlank() } ?: currentTrack.uri
-                        MusicThumbnail(
-                            artTarget = artTarget,
-                            contentDescription = currentTrack.album,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Album Art (~40dp, rounded 8dp)
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(AppTokens.Radius8))
+                                    .background(colors.surfaceMuted),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                val artTarget = currentTrack.albumArtUri?.takeIf { it.isNotBlank() } ?: currentTrack.uri
+                                MusicThumbnail(
+                                    artTarget = artTarget,
+                                    contentDescription = currentTrack.album,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
 
-                    // Title & Artist + Lossy/Lossless badge
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = currentTrack.title,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = colors.miniPlayerTextPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            MediaFormatBadge(
-                                formatInfo = formatInfo,
-                                surfaceOverride = colors.miniPlayerSurface,
-                                lightShadowOverride = colors.miniPlayerLightShadow,
-                                darkShadowOverride = colors.miniPlayerDarkShadow,
-                                textColorOverride = if (formatInfo.isLossless) colors.miniPlayerAccent else colors.miniPlayerTextSecondary
-                            )
+                            // Title & Artist + Lossy/Lossless badge
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = currentTrack.title,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = colors.miniPlayerTextPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    MediaFormatBadge(
+                                        formatInfo = formatInfo,
+                                        surfaceOverride = colors.miniPlayerSurface,
+                                        textColorOverride = colors.miniPlayerTextSecondary
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = currentTrack.artist,
+                                        fontSize = 12.sp,
+                                        color = colors.miniPlayerTextSecondary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            // Play/Pause Button (36dp filled circle matching reference)
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(colors.miniPlayerTextPrimary)
+                                    .clickable(
+                                        role = Role.Button,
+                                        onClick = onTogglePlayPause
+                                    )
+                                    .testTag("mini_player_play_pause"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = if (isPlaying) stringResource(R.string.control_pause) else stringResource(R.string.control_play),
+                                    tint = colors.miniPlayerSurface,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = currentTrack.artist,
-                                fontSize = 12.sp,
-                                color = colors.miniPlayerTextSecondary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f, fill = false)
+
+                            // Next Button (36dp flat icon)
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .clickable(
+                                        role = Role.Button,
+                                        onClick = onSkipNext
+                                    )
+                                    .testTag("mini_player_skip_next"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.SkipNext,
+                                    contentDescription = stringResource(R.string.control_next),
+                                    tint = colors.miniPlayerTextSecondary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        // Thin Progress Line (~2dp along bottom of card)
+                        val progress = if (durationMs > 0) {
+                            (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+                        } else 0f
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(2.5.dp)
+                                .background(colors.miniPlayerTextSecondary.copy(alpha = 0.25f))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(progress)
+                                    .fillMaxHeight()
+                                    .background(colors.miniPlayerProgress)
                             )
                         }
                     }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    // Play/Pause Button (40dp raised circular button)
-                    NeumorphicIconButton(
-                        onClick = onTogglePlayPause,
-                        size = 40.dp,
-                        level = NeumorphLevel.SMALL,
-                        contentDescription = if (isPlaying) "Jeda" else "Putar",
-                        lightShadowColorOverride = colors.miniPlayerLightShadow,
-                        darkShadowColorOverride = colors.miniPlayerDarkShadow,
-                        backgroundColorOverride = colors.miniPlayerSurface,
-                        icon = {
-                            Icon(
-                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = null,
-                                tint = colors.miniPlayerAccent,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        },
-                        modifier = Modifier.testTag("mini_player_play_pause")
-                    )
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    // Next Button (40dp raised circular button)
-                    NeumorphicIconButton(
-                        onClick = onSkipNext,
-                        size = 40.dp,
-                        level = NeumorphLevel.SMALL,
-                        contentDescription = "Berikutnya",
-                        lightShadowColorOverride = colors.miniPlayerLightShadow,
-                        darkShadowColorOverride = colors.miniPlayerDarkShadow,
-                        backgroundColorOverride = colors.miniPlayerSurface,
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Default.SkipNext,
-                                contentDescription = null,
-                                tint = colors.miniPlayerTextSecondary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        },
-                        modifier = Modifier.testTag("mini_player_skip_next")
-                    )
-                }
-
-                // Thin Progress Line (~3dp, inset track with 16dp horizontal margins, flat accent fill)
-                val progress = if (durationMs > 0) {
-                    (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
-                } else 0f
-
-                val trackShape = RoundedCornerShape(1.5.dp)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 4.dp)
-                        .height(3.dp)
-                        .clip(trackShape)
-                        .background(colors.miniPlayerDarkShadow.copy(alpha = if (colors.isDark) 0.6f else 0.4f))
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(progress)
-                            .fillMaxHeight()
-                            .clip(trackShape)
-                            .background(colors.miniPlayerAccent)
-                    )
                 }
             }
 
@@ -316,11 +306,8 @@ fun UnifiedDockedBottomBar(
                         MainNavigationTab.SETTINGS -> if (isSelected) Icons.Filled.Settings else Icons.Outlined.Settings
                     }
 
-                    val activeColor = colors.miniPlayerAccent
-                    val inactiveColor = colors.miniPlayerTextSecondary
-
                     val animatedItemColor by animateColorAsState(
-                        targetValue = if (isSelected) activeColor else inactiveColor,
+                        targetValue = if (isSelected) colors.accentText else colors.textSecondary,
                         animationSpec = colorAnimSpec,
                         label = "nav_item_color_${tab.name}"
                     )
@@ -349,7 +336,8 @@ fun UnifiedDockedBottomBar(
                     ) {
                         if (SHOW_NAV_LABELS) {
                             Column(
-                                horizontalAlignment = Alignment.CenterHorizontally
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
                             ) {
                                 Icon(
                                     imageVector = iconVector,
@@ -385,13 +373,12 @@ fun UnifiedDockedBottomBar(
 // PREVIEWS
 // =========================================================================
 
-@Preview(name = "Docked Bar Light - With Track (Musik)", showBackground = true, backgroundColor = 0xFFE0E5EC)
+@Preview(name = "Docked Bar Light - With Track (Musik)", showBackground = true, backgroundColor = 0xFFFFFFFF)
 @Composable
 fun UnifiedDockedBottomBarLightWithTrackPreview() {
     LilithTheme(darkTheme = false) {
         Box(
-            modifier = Modifier
-                .background(Color(0xFFE0E5EC))
+            modifier = Modifier.background(Color(0xFFFFFFFF))
         ) {
             UnifiedDockedBottomBar(
                 selectedTab = MainNavigationTab.MUSIC,
@@ -416,13 +403,12 @@ fun UnifiedDockedBottomBarLightWithTrackPreview() {
     }
 }
 
-@Preview(name = "Docked Bar Dark - With Track (Video)", showBackground = true, backgroundColor = 0xFF2B2F36)
+@Preview(name = "Docked Bar Dark - With Track (Video)", showBackground = true, backgroundColor = 0xFF0E1117)
 @Composable
 fun UnifiedDockedBottomBarDarkWithTrackPreview() {
     LilithTheme(darkTheme = true) {
         Box(
-            modifier = Modifier
-                .background(Color(0xFF2B2F36))
+            modifier = Modifier.background(Color(0xFF0E1117))
         ) {
             UnifiedDockedBottomBar(
                 selectedTab = MainNavigationTab.VIDEO,
@@ -447,13 +433,12 @@ fun UnifiedDockedBottomBarDarkWithTrackPreview() {
     }
 }
 
-@Preview(name = "Docked Bar Light - No Track (Pengaturan)", showBackground = true, backgroundColor = 0xFFE0E5EC)
+@Preview(name = "Docked Bar Light - No Track (Pengaturan)", showBackground = true, backgroundColor = 0xFFFFFFFF)
 @Composable
 fun UnifiedDockedBottomBarLightNoTrackPreview() {
     LilithTheme(darkTheme = false) {
         Box(
-            modifier = Modifier
-                .background(Color(0xFFE0E5EC))
+            modifier = Modifier.background(Color(0xFFFFFFFF))
         ) {
             UnifiedDockedBottomBar(
                 selectedTab = MainNavigationTab.SETTINGS,
@@ -471,13 +456,12 @@ fun UnifiedDockedBottomBarLightNoTrackPreview() {
     }
 }
 
-@Preview(name = "Docked Bar Dark - No Track (Musik)", showBackground = true, backgroundColor = 0xFF2B2F36)
+@Preview(name = "Docked Bar Dark - No Track (Musik)", showBackground = true, backgroundColor = 0xFF0E1117)
 @Composable
 fun UnifiedDockedBottomBarDarkNoTrackPreview() {
     LilithTheme(darkTheme = true) {
         Box(
-            modifier = Modifier
-                .background(Color(0xFF2B2F36))
+            modifier = Modifier.background(Color(0xFF0E1117))
         ) {
             UnifiedDockedBottomBar(
                 selectedTab = MainNavigationTab.MUSIC,

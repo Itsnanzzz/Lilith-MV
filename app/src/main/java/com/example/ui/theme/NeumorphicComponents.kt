@@ -1,21 +1,15 @@
 package com.example.ui.theme
 
-import android.graphics.BlurMaskFilter
-import android.graphics.Paint
-import android.graphics.Path
-import android.graphics.RectF
+import android.provider.Settings
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.AnimationSpec
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -34,13 +28,12 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -52,49 +45,30 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.selected
-import com.example.MainNavigationTab
-import com.example.R
-import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.LocalTextStyle
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.RoundRect
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.asAndroidPath
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -102,171 +76,35 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.MainNavigationTab
+import com.example.R
 
 /**
- * Modifier that applies true Neumorphic depth (Raised, Pressed/Inset, or Flat)
- * using drawWithCache and native Canvas Paint shadow layers.
+ * Clean Flat modifier replacing Neumorphic shadows with simple background color and shape.
+ * Zero blur, zero glow, zero shadows.
  */
 fun Modifier.neumorphic(
-    shape: Shape = RoundedCornerShape(NeumorphicTokens.RadiusMedium),
+    shape: Shape = RoundedCornerShape(12.dp),
     level: NeumorphLevel = NeumorphLevel.MEDIUM,
     style: NeumorphStyle = NeumorphStyle.RAISED,
     lightShadowColorOverride: Color? = null,
     darkShadowColorOverride: Color? = null,
     backgroundColorOverride: Color? = null
 ): Modifier = this.then(
-    Modifier.drawWithCache {
-        val outline = shape.createOutline(size, layoutDirection, this)
-        val offsetPx = when (level) {
-            NeumorphLevel.SMALL -> 3.dp.toPx()
-            NeumorphLevel.MEDIUM -> 6.dp.toPx()
-            NeumorphLevel.LARGE -> 10.dp.toPx()
-        }
-        val blurPx = when (level) {
-            NeumorphLevel.SMALL -> 5.dp.toPx()
-            NeumorphLevel.MEDIUM -> 10.dp.toPx()
-            NeumorphLevel.LARGE -> 16.dp.toPx()
-        }
-
-        val baseAndroidPath = Path()
-        when (outline) {
-            is Outline.Rectangle -> {
-                baseAndroidPath.addRect(
-                    outline.rect.left,
-                    outline.rect.top,
-                    outline.rect.right,
-                    outline.rect.bottom,
-                    Path.Direction.CW
-                )
-            }
-            is Outline.Rounded -> {
-                val rr = outline.roundRect
-                baseAndroidPath.addRoundRect(
-                    RectF(rr.left, rr.top, rr.right, rr.bottom),
-                    floatArrayOf(
-                        rr.topLeftCornerRadius.x, rr.topLeftCornerRadius.y,
-                        rr.topRightCornerRadius.x, rr.topRightCornerRadius.y,
-                        rr.bottomRightCornerRadius.x, rr.bottomRightCornerRadius.y,
-                        rr.bottomLeftCornerRadius.x, rr.bottomLeftCornerRadius.y
-                    ),
-                    Path.Direction.CW
-                )
-            }
-            is Outline.Generic -> {
-                baseAndroidPath.set(outline.path.asAndroidPath())
-            }
-        }
-
-        onDrawBehind {
-            drawIntoCanvas { canvas ->
-                val native = canvas.nativeCanvas
-                val colors = if (backgroundColorOverride != null) {
-                    NeumorphicColors(
-                        background = backgroundColorOverride,
-                        surface = backgroundColorOverride,
-                        lightShadow = lightShadowColorOverride ?: Color.White.copy(alpha = 0.6f),
-                        darkShadow = darkShadowColorOverride ?: Color.Black.copy(alpha = 0.2f),
-                        textPrimary = Color.White,
-                        textSecondary = Color.White.copy(alpha = 0.7f),
-                        accent = NeumorphicTokens.DarkAccent,
-                        isDark = true
-                    )
-                } else {
-                    NeumorphicTokens.LightColors // fallback, overridden below in runtime composables via theme
-                }
-
-                val surfaceCol = backgroundColorOverride ?: colors.surface
-                val lightShadow = lightShadowColorOverride ?: colors.lightShadow
-                val darkShadow = darkShadowColorOverride ?: colors.darkShadow
-
-                when (style) {
-                    NeumorphStyle.FLAT -> {
-                        val fillPaint = Paint().apply {
-                            isAntiAlias = true
-                            color = surfaceCol.toArgb()
-                            this.style = Paint.Style.FILL
-                        }
-                        native.drawPath(baseAndroidPath, fillPaint)
-                    }
-
-                    NeumorphStyle.RAISED -> {
-                        // 1. Dark Shadow (Bottom-Right)
-                        val darkPaint = Paint().apply {
-                            isAntiAlias = true
-                            color = surfaceCol.toArgb()
-                            this.style = Paint.Style.FILL
-                            setShadowLayer(blurPx, offsetPx, offsetPx, darkShadow.toArgb())
-                        }
-                        native.drawPath(baseAndroidPath, darkPaint)
-
-                        // 2. Light Shadow (Top-Left)
-                        val lightPaint = Paint().apply {
-                            isAntiAlias = true
-                            color = surfaceCol.toArgb()
-                            this.style = Paint.Style.FILL
-                            setShadowLayer(blurPx, -offsetPx, -offsetPx, lightShadow.toArgb())
-                        }
-                        native.drawPath(baseAndroidPath, lightPaint)
-
-                        // 3. Crisp Surface Fill
-                        val basePaint = Paint().apply {
-                            isAntiAlias = true
-                            color = surfaceCol.toArgb()
-                            this.style = Paint.Style.FILL
-                        }
-                        native.drawPath(baseAndroidPath, basePaint)
-                    }
-
-                    NeumorphStyle.PRESSED -> {
-                        // 1. Draw base surface fill
-                        val basePaint = Paint().apply {
-                            isAntiAlias = true
-                            color = surfaceCol.toArgb()
-                            this.style = Paint.Style.FILL
-                        }
-                        native.drawPath(baseAndroidPath, basePaint)
-
-                        // 2. Inner Shadows via Canvas Clipping
-                        val checkpoint = native.save()
-                        native.clipPath(baseAndroidPath)
-
-                        val strokeWidth = offsetPx * 2f
-
-                        // Top-Left Inset Shadow (Dark)
-                        val innerDarkPaint = Paint().apply {
-                            isAntiAlias = true
-                            this.style = Paint.Style.STROKE
-                            this.strokeWidth = strokeWidth
-                            color = darkShadow.toArgb()
-                            setShadowLayer(blurPx, offsetPx, offsetPx, darkShadow.toArgb())
-                        }
-                        native.drawPath(baseAndroidPath, innerDarkPaint)
-
-                        // Bottom-Right Inset Shadow (Light)
-                        val innerLightPaint = Paint().apply {
-                            isAntiAlias = true
-                            this.style = Paint.Style.STROKE
-                            this.strokeWidth = strokeWidth
-                            color = lightShadow.toArgb()
-                            setShadowLayer(blurPx, -offsetPx, -offsetPx, lightShadow.toArgb())
-                        }
-                        native.drawPath(baseAndroidPath, innerLightPaint)
-
-                        native.restoreToCount(checkpoint)
-                    }
-                }
-            }
-        }
+    if (backgroundColorOverride != null) {
+        Modifier.background(backgroundColorOverride, shape)
+    } else {
+        Modifier
     }
 )
 
 /**
- * A basic Neumorphic container providing background, shape, and shadow depth.
+ * Flat Surface container.
  */
 @Composable
 fun NeumorphicSurface(
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(NeumorphicTokens.RadiusMedium),
+    shape: Shape = RoundedCornerShape(12.dp),
     level: NeumorphLevel = NeumorphLevel.MEDIUM,
     style: NeumorphStyle = NeumorphStyle.RAISED,
     content: @Composable () -> Unit
@@ -274,15 +112,8 @@ fun NeumorphicSurface(
     val colors = NeumorphicTheme.colors
     Box(
         modifier = modifier
-            .neumorphic(
-                shape = shape,
-                level = level,
-                style = style,
-                lightShadowColorOverride = colors.lightShadow,
-                darkShadowColorOverride = colors.darkShadow,
-                backgroundColorOverride = colors.surface
-            )
             .clip(shape)
+            .background(colors.surface)
     ) {
         CompositionLocalProvider(LocalContentColor provides colors.textPrimary) {
             content()
@@ -291,15 +122,15 @@ fun NeumorphicSurface(
 }
 
 /**
- * A Neumorphic Card container.
+ * Flat Card container.
  */
 @Composable
 fun NeumorphicCard(
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(NeumorphicTokens.RadiusMedium),
+    shape: Shape = RoundedCornerShape(12.dp),
     level: NeumorphLevel = NeumorphLevel.MEDIUM,
     style: NeumorphStyle = NeumorphStyle.RAISED,
-    contentPadding: Dp = NeumorphicTokens.Space16,
+    contentPadding: Dp = 16.dp,
     onClick: (() -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
@@ -308,22 +139,16 @@ fun NeumorphicCard(
         Modifier.clickable(
             interactionSource = remember { MutableInteractionSource() },
             indication = null,
+            role = Role.Button,
             onClick = onClick
         )
     } else Modifier
 
     Box(
         modifier = modifier
-            .neumorphic(
-                shape = shape,
-                level = level,
-                style = style,
-                lightShadowColorOverride = colors.lightShadow,
-                darkShadowColorOverride = colors.darkShadow,
-                backgroundColorOverride = colors.surface
-            )
             .then(clickModifier)
             .clip(shape)
+            .background(colors.surface)
             .then(if (contentPadding > 0.dp) Modifier.padding(contentPadding) else Modifier)
     ) {
         CompositionLocalProvider(LocalContentColor provides colors.textPrimary) {
@@ -333,7 +158,7 @@ fun NeumorphicCard(
 }
 
 /**
- * Fully circular Neumorphic Icon Button that animates from Raised to Pressed on touch.
+ * Flat Icon Button with 48dp minimum touch target and clean scale feedback.
  */
 @Composable
 fun NeumorphicIconButton(
@@ -351,14 +176,27 @@ fun NeumorphicIconButton(
     icon: @Composable () -> Unit
 ) {
     val colors = NeumorphicTheme.colors
+    val context = LocalContext.current
+    val isAnimationDisabled = remember(context) {
+        try {
+            Settings.Global.getFloat(
+                context.contentResolver,
+                Settings.Global.ANIMATOR_DURATION_SCALE,
+                1f
+            ) == 0f
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
-    val currentStyle = when {
-        !enabled -> NeumorphStyle.FLAT
-        isPressed || isActive -> NeumorphStyle.PRESSED
-        else -> NeumorphStyle.RAISED
-    }
+    val scale by animateFloatAsState(
+        targetValue = if (!isAnimationDisabled && isPressed) 0.94f else 1.0f,
+        animationSpec = tween(durationMillis = 150),
+        label = "btn_scale"
+    )
 
     val iconTint = when {
         !enabled -> colors.textSecondary.copy(alpha = 0.4f)
@@ -371,19 +209,14 @@ fun NeumorphicIconButton(
     Box(
         modifier = baseModifier
             .size(size)
-            .neumorphic(
-                shape = CircleShape,
-                level = level,
-                style = currentStyle,
-                lightShadowColorOverride = lightShadowColorOverride ?: colors.lightShadow,
-                darkShadowColorOverride = darkShadowColorOverride ?: colors.darkShadow,
-                backgroundColorOverride = backgroundColorOverride ?: colors.surface
-            )
+            .scale(scale)
             .clip(CircleShape)
+            .then(if (backgroundColorOverride != null) Modifier.background(backgroundColorOverride) else Modifier)
             .clickable(
                 enabled = enabled,
                 interactionSource = interactionSource,
                 indication = null,
+                role = Role.Button,
                 onClick = onClick
             )
             .semantics {
@@ -398,9 +231,6 @@ fun NeumorphicIconButton(
     }
 }
 
-/**
- * Neumorphic Toggle Button that stays pressed when toggled on.
- */
 @Composable
 fun NeumorphicToggleButton(
     checked: Boolean,
@@ -440,7 +270,7 @@ fun NeumorphicToggleButton(
 }
 
 /**
- * Neumorphic Slider with an Inset track, filled accent progress, and a Raised thumb.
+ * Flat Slider: 4dp track in hairline, solid accent/primary progress, 12dp thumb, 48dp touch height.
  */
 @Composable
 fun NeumorphicSlider(
@@ -448,110 +278,94 @@ fun NeumorphicSlider(
     onValueChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
     valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
+    enabled: Boolean = true,
+    accentColorOverride: Color? = null,
     onValueChangeFinished: (() -> Unit)? = null,
     testTag: String? = null
 ) {
     val colors = NeumorphicTheme.colors
-    val density = LocalDensity.current
+    val accent = accentColorOverride ?: colors.accent
+    val rangeSpan = (valueRange.endInclusive - valueRange.start).coerceAtLeast(0.0001f)
+    val normalizedVal = ((value - valueRange.start) / rangeSpan).coerceIn(0f, 1f)
 
-    val normalized = if (valueRange.endInclusive > valueRange.start) {
-        ((value - valueRange.start) / (valueRange.endInclusive - valueRange.start)).coerceIn(0f, 1f)
-    } else 0f
+    var isDragging by remember { mutableStateOf(false) }
+    var dragFraction by remember { mutableFloatStateOf(normalizedVal) }
 
-    val baseModifier = if (testTag != null) modifier.testTag(testTag) else modifier
-
-    val currentOnValueChange by rememberUpdatedState(onValueChange)
-    val currentOnValueChangeFinished by rememberUpdatedState(onValueChangeFinished)
-    val currentValueRange by rememberUpdatedState(valueRange)
+    val activeFraction = if (isDragging) dragFraction else normalizedVal
 
     BoxWithConstraints(
-        modifier = baseModifier
-            .fillMaxWidth()
-            .height(48.dp) // Generous 48dp touch target for entire slider
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    down.consume()
-                    val totalW = size.width.toFloat()
-                    val thumbR = with(density) { 11.dp.toPx() }
-                    val trackW = (totalW - thumbR * 2).coerceAtLeast(1f)
-
-                    fun calcVal(xPos: Float): Float {
-                        val fraction = ((xPos - thumbR) / trackW).coerceIn(0f, 1f)
-                        return currentValueRange.start + fraction * (currentValueRange.endInclusive - currentValueRange.start)
-                    }
-
-                    currentOnValueChange(calcVal(down.position.x))
-
-                    val pointerId = down.id
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == pointerId } ?: break
-                        if (change.changedToUpIgnoreConsumed()) {
-                            change.consume()
-                            break
-                        }
+        modifier = modifier
+            .height(48.dp)
+            .pointerInput(enabled, valueRange) {
+                if (!enabled) return@pointerInput
+                detectHorizontalDragGestures(
+                    onDragStart = { offset ->
+                        isDragging = true
+                        dragFraction = (offset.x / size.width).coerceIn(0f, 1f)
+                    },
+                    onDragEnd = {
+                        val finalVal = valueRange.start + dragFraction * rangeSpan
+                        onValueChange(finalVal)
+                        onValueChangeFinished?.invoke()
+                        isDragging = false
+                    },
+                    onDragCancel = {
+                        isDragging = false
+                    },
+                    onHorizontalDrag = { change, _ ->
                         change.consume()
-                        currentOnValueChange(calcVal(change.position.x))
+                        dragFraction = (change.position.x / size.width).coerceIn(0f, 1f)
                     }
-                    currentOnValueChangeFinished?.invoke()
-                }
-            },
+                )
+            }
+            .pointerInput(enabled, valueRange) {
+                if (!enabled) return@pointerInput
+                detectTapGestures(
+                    onTap = { offset ->
+                        val frac = (offset.x / size.width).coerceIn(0f, 1f)
+                        val finalVal = valueRange.start + frac * rangeSpan
+                        onValueChange(finalVal)
+                        onValueChangeFinished?.invoke()
+                    }
+                )
+            }
+            .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
         contentAlignment = Alignment.CenterStart
     ) {
-        val totalWidthPx = constraints.maxWidth.toFloat()
-        val thumbRadius = 11.dp
-        val thumbRadiusPx = with(density) { thumbRadius.toPx() }
-        val trackWidthPx = (totalWidthPx - thumbRadiusPx * 2).coerceAtLeast(1f)
+        val totalWidth = maxWidth
+        val thumbOffset = totalWidth * activeFraction
 
-        // Inset Track Well (clean, thin 8dp track)
+        // Hairline track
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(8.dp)
-                .neumorphic(
-                    shape = RoundedCornerShape(NeumorphicTokens.RadiusPill),
-                    level = NeumorphLevel.SMALL,
-                    style = NeumorphStyle.PRESSED,
-                    lightShadowColorOverride = colors.lightShadow,
-                    darkShadowColorOverride = colors.darkShadow,
-                    backgroundColorOverride = colors.surface
-                )
-                .clip(RoundedCornerShape(NeumorphicTokens.RadiusPill))
-        ) {
-            // Accent progress fill
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(normalized)
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(NeumorphicTokens.RadiusPill))
-                    .background(colors.accent)
-            )
-        }
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(if (colors.isDark) Color(0xFF262C3A) else Color(0xFFE6E8EE))
+        )
 
-        // Draggable Thumb (visual only, touch handled by parent BoxWithConstraints)
-        val thumbOffsetPx = normalized * trackWidthPx
-        val thumbOffsetDp = with(density) { thumbOffsetPx.toDp() }
-
+        // Progress track
         Box(
             modifier = Modifier
-                .offset(x = thumbOffsetDp)
-                .size(thumbRadius * 2)
-                .neumorphic(
-                    shape = CircleShape,
-                    level = NeumorphLevel.SMALL,
-                    style = NeumorphStyle.RAISED,
-                    lightShadowColorOverride = colors.lightShadow,
-                    darkShadowColorOverride = colors.darkShadow,
-                    backgroundColorOverride = colors.surface
-                )
+                .fillMaxWidth(activeFraction)
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(accent)
+        )
+
+        // 12dp Thumb
+        Box(
+            modifier = Modifier
+                .offset(x = (thumbOffset - 6.dp).coerceIn(0.dp, totalWidth - 12.dp))
+                .size(12.dp)
                 .clip(CircleShape)
+                .background(accent)
         )
     }
 }
 
 /**
- * Neumorphic Switch with an Inset well track and a smoothly sliding Raised thumb.
+ * Flat Switch with clean slide transition.
  */
 @Composable
 fun NeumorphicSwitch(
@@ -559,63 +373,15 @@ fun NeumorphicSwitch(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val colors = NeumorphicTheme.colors
-    val thumbOffset by animateDpAsState(
-        targetValue = if (checked) 24.dp else 2.dp,
-        animationSpec = tween(durationMillis = NeumorphicTokens.AnimDurationMs),
-        label = "thumb_offset"
-    )
-
-    Box(
+    AppSwitch(
+        checked = checked,
+        onCheckedChange = onCheckedChange,
         modifier = modifier
-            .width(52.dp)
-            .height(28.dp)
-            .neumorphic(
-                shape = RoundedCornerShape(NeumorphicTokens.RadiusPill),
-                level = NeumorphLevel.SMALL,
-                style = NeumorphStyle.PRESSED,
-                lightShadowColorOverride = colors.lightShadow,
-                darkShadowColorOverride = colors.darkShadow,
-                backgroundColorOverride = colors.surface
-            )
-            .clip(RoundedCornerShape(NeumorphicTokens.RadiusPill))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = { onCheckedChange(!checked) }
-            ),
-        contentAlignment = Alignment.CenterStart
-    ) {
-        // Track tint when active
-        if (checked) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(colors.accent.copy(alpha = 0.25f))
-            )
-        }
-
-        // Raised thumb
-        Box(
-            modifier = Modifier
-                .offset(x = thumbOffset)
-                .size(24.dp)
-                .padding(2.dp)
-                .neumorphic(
-                    shape = CircleShape,
-                    level = NeumorphLevel.SMALL,
-                    style = NeumorphStyle.RAISED,
-                    lightShadowColorOverride = colors.lightShadow,
-                    darkShadowColorOverride = colors.darkShadow,
-                    backgroundColorOverride = if (checked) colors.accent else colors.surface
-                )
-                .clip(CircleShape)
-        )
-    }
+    )
 }
 
 /**
- * Neumorphic Chip for filters and tabs: Raised when inactive, Pressed with accent indicator when selected.
+ * Flat Chip for tabs and filters.
  */
 @Composable
 fun NeumorphicChip(
@@ -625,32 +391,26 @@ fun NeumorphicChip(
     label: @Composable () -> Unit
 ) {
     val colors = NeumorphicTheme.colors
-    val style = if (selected) NeumorphStyle.PRESSED else NeumorphStyle.RAISED
-    val contentColor = if (selected) colors.accent else colors.textPrimary
+    val containerColor = if (selected) colors.accent else (if (colors.isDark) Color(0xFF1A1F2B) else Color(0xFFF3F4F7))
+    val contentColor = if (selected) Color.White else colors.textSecondary
 
     Box(
         modifier = modifier
             .height(32.dp)
-            .neumorphic(
-                shape = RoundedCornerShape(NeumorphicTokens.RadiusPill),
-                level = NeumorphLevel.SMALL,
-                style = style,
-                lightShadowColorOverride = colors.lightShadow,
-                darkShadowColorOverride = colors.darkShadow,
-                backgroundColorOverride = colors.surface
-            )
-            .clip(RoundedCornerShape(NeumorphicTokens.RadiusPill))
+            .clip(RoundedCornerShape(999.dp))
+            .background(containerColor)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
+                role = Role.Tab,
                 onClick = onClick
             )
-            .padding(horizontal = 10.dp),
+            .padding(horizontal = 14.dp),
         contentAlignment = Alignment.Center
     ) {
         CompositionLocalProvider(
             LocalContentColor provides contentColor,
-            LocalTextStyle provides TextStyle(fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, fontSize = 13.sp)
+            LocalTextStyle provides TextStyle(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, fontSize = 13.sp)
         ) {
             label()
         }
@@ -658,7 +418,7 @@ fun NeumorphicChip(
 }
 
 /**
- * Neumorphic Inset Text Field for search and forms.
+ * Flat Text Field for search.
  */
 @Composable
 fun NeumorphicTextField(
@@ -671,19 +431,13 @@ fun NeumorphicTextField(
     singleLine: Boolean = true
 ) {
     val colors = NeumorphicTheme.colors
+    val bg = if (colors.isDark) Color(0xFF1A1F2B) else Color(0xFFF3F4F7)
 
     Box(
         modifier = modifier
             .height(40.dp)
-            .neumorphic(
-                shape = RoundedCornerShape(NeumorphicTokens.RadiusMedium),
-                level = NeumorphLevel.SMALL,
-                style = NeumorphStyle.PRESSED,
-                lightShadowColorOverride = colors.lightShadow,
-                darkShadowColorOverride = colors.darkShadow,
-                backgroundColorOverride = colors.surface
-            )
-            .clip(RoundedCornerShape(NeumorphicTokens.RadiusMedium))
+            .clip(RoundedCornerShape(999.dp))
+            .background(bg)
             .padding(horizontal = 14.dp),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -712,7 +466,7 @@ fun NeumorphicTextField(
                     textStyle = TextStyle(
                         color = colors.textPrimary,
                         fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Normal
                     ),
                     cursorBrush = SolidColor(colors.accent),
                     modifier = Modifier.fillMaxWidth()
@@ -751,15 +505,7 @@ fun NeumorphicTextField(
 }
 
 /**
- * Modern Icon-Only Floating Neumorphic Bottom Navigation Bar.
- * - Floating capsule pill with fully rounded ends (half-height radius, 29dp for 58dp height).
- * - Raised neumorphic container using lightest shadow level (SMALL).
- * - Compact centered width (~280dp, ~78% screen width) giving ~93dp touch area per item.
- * - Smooth ~200ms animated sliding circular INSET (Pressed) container (~44dp) for the active tab.
- * - Extra accent-colored dot (~4dp) below the icon inside the inset container.
- * - Instant snap transition when system "remove animations" setting is active.
- * - Accessible TalkBack semantics (Role.Tab, selected state, contentDescription) and >=48dp touch targets.
- * - Light haptic feedback (TextHandleMove) on tab selection change.
+ * Flat Bottom Navigation Bar (Docked full width or floating pill).
  */
 @Composable
 fun NeumorphicFloatingBottomBar(
@@ -768,150 +514,57 @@ fun NeumorphicFloatingBottomBar(
     modifier: Modifier = Modifier
 ) {
     val colors = NeumorphicTheme.colors
-    val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
 
-    val isAnimationDisabled = remember(context) {
-        try {
-            android.provider.Settings.Global.getFloat(
-                context.contentResolver,
-                android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,
-                1f
-            ) == 0f
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    val floatAnimSpec: AnimationSpec<Float> = if (isAnimationDisabled) {
-        snap()
-    } else {
-        tween(durationMillis = 200, easing = FastOutSlowInEasing)
-    }
-
-    val colorAnimSpec: AnimationSpec<Color> = if (isAnimationDisabled) {
-        snap()
-    } else {
-        tween(durationMillis = 200)
-    }
-
-    val tabs = remember {
-        listOf(
-            Triple(MainNavigationTab.MUSIC, R.string.nav_music, "nav_music_item"),
-            Triple(MainNavigationTab.VIDEO, R.string.nav_video, "nav_video_item"),
-            Triple(MainNavigationTab.SETTINGS, R.string.nav_settings, "nav_settings_item")
-        )
-    }
-
-    val selectedIndex = when (selectedTab) {
-        MainNavigationTab.MUSIC -> 0
-        MainNavigationTab.VIDEO -> 1
-        MainNavigationTab.SETTINGS -> 2
-    }
-
-    val animatedIndex by animateFloatAsState(
-        targetValue = selectedIndex.toFloat(),
-        animationSpec = floatAnimSpec,
-        label = "nav_indicator_offset"
-    )
-
-    val barHeight = 58.dp
-    val barShape = RoundedCornerShape(29.dp) // Half height = fully rounded pill ends
-
-    BoxWithConstraints(
+    Box(
         modifier = modifier
-            .widthIn(min = 260.dp, max = 320.dp)
-            .fillMaxWidth(0.78f)
-            .height(barHeight)
-            .neumorphic(
-                shape = barShape,
-                level = NeumorphLevel.SMALL,
-                style = NeumorphStyle.RAISED,
-                lightShadowColorOverride = colors.lightShadow,
-                darkShadowColorOverride = colors.darkShadow,
-                backgroundColorOverride = colors.surface
-            )
-            .clip(barShape)
+            .fillMaxWidth()
+            .height(58.dp)
+            .background(colors.surface),
+        contentAlignment = Alignment.Center
     ) {
-        val slotWidth = maxWidth / 3
-
-        // Sliding Inset (Pressed) container (~44dp) with accent dot (~4dp)
-        val indicatorSize = 44.dp
-        val indicatorOffset = (slotWidth * (animatedIndex + 0.5f)) - (indicatorSize / 2)
-
-        Box(
-            modifier = Modifier
-                .offset(x = indicatorOffset)
-                .align(Alignment.CenterStart)
-                .size(indicatorSize)
-                .neumorphic(
-                    shape = CircleShape,
-                    level = NeumorphLevel.SMALL,
-                    style = NeumorphStyle.PRESSED,
-                    lightShadowColorOverride = colors.lightShadow,
-                    darkShadowColorOverride = colors.darkShadow,
-                    backgroundColorOverride = colors.surface
-                )
-                .clip(CircleShape)
-        ) {
-            // Small accent-colored dot (~4dp) inside the selected container as an extra indicator
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 3.dp)
-                    .size(4.dp)
-                    .clip(CircleShape)
-                    .background(colors.accent)
-            )
-        }
-
-        // Tab items row (full width, 3 equal clickable slots >= 48dp)
         Row(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp),
+            horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            tabs.forEachIndexed { index, (tab, stringResId, testTag) ->
-                val isSelected = selectedTab == tab
-                val title = stringResource(stringResId)
-
+            MainNavigationTab.entries.forEach { tab ->
+                val isSelected = tab == selectedTab
                 val iconVector = when (tab) {
                     MainNavigationTab.MUSIC -> if (isSelected) Icons.Filled.MusicNote else Icons.Outlined.MusicNote
                     MainNavigationTab.VIDEO -> if (isSelected) Icons.Filled.Videocam else Icons.Outlined.Videocam
                     MainNavigationTab.SETTINGS -> if (isSelected) Icons.Filled.Settings else Icons.Outlined.Settings
                 }
-
-                val iconColor by animateColorAsState(
-                    targetValue = if (isSelected) colors.accent else colors.textSecondary,
-                    animationSpec = colorAnimSpec,
-                    label = "icon_color_$index"
-                )
+                val label = when (tab) {
+                    MainNavigationTab.MUSIC -> stringResource(R.string.nav_music)
+                    MainNavigationTab.VIDEO -> stringResource(R.string.nav_video)
+                    MainNavigationTab.SETTINGS -> stringResource(R.string.nav_settings)
+                }
 
                 Box(
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
+                        .size(48.dp)
                         .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
+                            role = Role.Tab,
                             onClick = {
-                                if (selectedTab != tab) {
+                                if (!isSelected) {
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onTabSelected(tab)
                                 }
                             }
                         )
                         .semantics {
-                            this.role = Role.Tab
                             this.selected = isSelected
-                            this.contentDescription = title
-                        }
-                        .testTag(testTag),
+                            this.contentDescription = label
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = iconVector,
-                        contentDescription = null, // Handled by container semantics
-                        tint = iconColor,
+                        contentDescription = label,
+                        tint = if (isSelected) colors.textPrimary else colors.textSecondary,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -920,32 +573,23 @@ fun NeumorphicFloatingBottomBar(
     }
 }
 
-/**
- * Traditional Neumorphic Bottom Navigation Bar container and items (preserved for backwards-compatibility).
- */
 @Composable
 fun NeumorphicBottomBar(
     modifier: Modifier = Modifier,
     content: @Composable RowScope.() -> Unit
 ) {
     val colors = NeumorphicTheme.colors
-
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .neumorphic(
-                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                level = NeumorphLevel.LARGE,
-                style = NeumorphStyle.RAISED,
-                lightShadowColorOverride = colors.lightShadow,
-                darkShadowColorOverride = colors.darkShadow,
-                backgroundColorOverride = colors.surface
-            )
-            .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-            .padding(vertical = 6.dp, horizontal = 12.dp)
+            .height(58.dp)
+            .background(colors.surface),
+        contentAlignment = Alignment.Center
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically,
             content = content
@@ -957,47 +601,37 @@ fun NeumorphicBottomBar(
 fun RowScope.NeumorphicBottomBarItem(
     selected: Boolean,
     onClick: () -> Unit,
-    icon: @Composable () -> Unit,
-    label: @Composable () -> Unit,
-    modifier: Modifier = Modifier
+    icon: @Composable (isSelected: Boolean) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null
 ) {
     val colors = NeumorphicTheme.colors
-    val style = if (selected) NeumorphStyle.PRESSED else NeumorphStyle.FLAT
-    val itemColor = if (selected) colors.accent else colors.textSecondary
+    val haptic = LocalHapticFeedback.current
 
-    Column(
+    Box(
         modifier = modifier
             .weight(1f)
             .height(48.dp)
-            .neumorphic(
-                shape = RoundedCornerShape(14.dp),
-                level = NeumorphLevel.SMALL,
-                style = style,
-                lightShadowColorOverride = colors.lightShadow,
-                darkShadowColorOverride = colors.darkShadow,
-                backgroundColorOverride = colors.surface
-            )
-            .clip(RoundedCornerShape(14.dp))
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            ),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        CompositionLocalProvider(LocalContentColor provides itemColor) {
-            icon()
-        }
-        Spacer(modifier = Modifier.height(2.dp))
-        CompositionLocalProvider(
-            LocalContentColor provides itemColor,
-            LocalTextStyle provides TextStyle(
-                fontSize = 11.sp,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                role = Role.Tab,
+                onClick = {
+                    if (!selected) {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    }
+                    onClick()
+                }
             )
+            .semantics {
+                this.selected = selected
+                this.contentDescription = contentDescription ?: label
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        CompositionLocalProvider(
+            LocalContentColor provides if (selected) colors.textPrimary else colors.textSecondary
         ) {
-            label()
+            icon(selected)
         }
     }
 }
@@ -1006,208 +640,37 @@ fun RowScope.NeumorphicBottomBarItem(
 fun RowScope.NeumorphicBottomBarItem(
     selected: Boolean,
     onClick: () -> Unit,
-    icon: @Composable () -> Unit,
+    icon: ImageVector,
     label: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null
 ) {
     NeumorphicBottomBarItem(
         selected = selected,
         onClick = onClick,
-        icon = icon,
-        label = { Text(label) },
-        modifier = modifier
+        icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp)) },
+        label = label,
+        modifier = modifier,
+        contentDescription = contentDescription
     )
 }
 
 // =========================================================================
-// Previews for Neumorphic Components in both Light and Dark themes
+// CLEAN FLAT PREVIEWS (REPLACING OLD NEUMORPHIC PREVIEWS)
 // =========================================================================
 
-@Preview(name = "Neumorphic Components - Light", showBackground = true)
+@Preview(name = "Clean Components - Light", showBackground = true, backgroundColor = 0xFFFFFFFF)
 @Composable
-fun PreviewNeumorphicComponentsLight() {
+fun PreviewFlatComponentsBridgeLight() {
     LilithTheme(darkTheme = false) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(NeumorphicTheme.colors.background)
-                .padding(20.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(
-                    text = "Neumorphic Soft UI (Light)",
-                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp, color = NeumorphicTheme.colors.textPrimary)
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    NeumorphicIconButton(onClick = {}, icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) })
-                    NeumorphicIconButton(onClick = {}, icon = { Icon(Icons.Default.Check, contentDescription = null) }, isActive = true)
-                    NeumorphicSwitch(checked = true, onCheckedChange = {})
-                    NeumorphicSwitch(checked = false, onCheckedChange = {})
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    NeumorphicChip(selected = true, onClick = {}, label = { Text("Lossless") })
-                    NeumorphicChip(selected = false, onClick = {}, label = { Text("Lossy") })
-                }
-
-                NeumorphicSlider(value = 0.6f, onValueChange = {})
-
-                NeumorphicTextField(
-                    value = "",
-                    onValueChange = {},
-                    placeholder = { Text("Cari lagu...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
-                )
-            }
-        }
+        PreviewFlatComponentsLight()
     }
 }
 
-@Preview(name = "Neumorphic Components - Dark", showBackground = true)
+@Preview(name = "Clean Components - Dark", showBackground = true, backgroundColor = 0xFF0E1117)
 @Composable
-fun PreviewNeumorphicComponentsDark() {
+fun PreviewFlatComponentsBridgeDark() {
     LilithTheme(darkTheme = true) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(NeumorphicTheme.colors.background)
-                .padding(20.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(
-                    text = "Neumorphic Soft UI (Dark)",
-                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp, color = NeumorphicTheme.colors.textPrimary)
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    NeumorphicIconButton(onClick = {}, icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) })
-                    NeumorphicIconButton(onClick = {}, icon = { Icon(Icons.Default.Check, contentDescription = null) }, isActive = true)
-                    NeumorphicSwitch(checked = true, onCheckedChange = {})
-                    NeumorphicSwitch(checked = false, onCheckedChange = {})
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    NeumorphicChip(selected = true, onClick = {}, label = { Text("Lossless") })
-                    NeumorphicChip(selected = false, onClick = {}, label = { Text("Lossy") })
-                }
-
-                NeumorphicSlider(value = 0.6f, onValueChange = {})
-
-                NeumorphicTextField(
-                    value = "",
-                    onValueChange = {},
-                    placeholder = { Text("Cari lagu...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
-                )
-            }
-        }
+        PreviewFlatComponentsDark()
     }
 }
-
-// =========================================================================
-// Floating Bottom Bar Previews (Light and Dark for all 3 tabs)
-// =========================================================================
-
-@Preview(name = "Floating Bottom Bar - Light (Music Selected)", showBackground = true)
-@Composable
-fun PreviewFloatingBottomBarLightMusic() {
-    LilithTheme(darkTheme = false) {
-        Box(
-            modifier = Modifier
-                .background(NeumorphicTokens.LightBackground)
-                .padding(24.dp)
-        ) {
-            NeumorphicFloatingBottomBar(
-                selectedTab = MainNavigationTab.MUSIC,
-                onTabSelected = {}
-            )
-        }
-    }
-}
-
-@Preview(name = "Floating Bottom Bar - Light (Video Selected)", showBackground = true)
-@Composable
-fun PreviewFloatingBottomBarLightVideo() {
-    LilithTheme(darkTheme = false) {
-        Box(
-            modifier = Modifier
-                .background(NeumorphicTokens.LightBackground)
-                .padding(24.dp)
-        ) {
-            NeumorphicFloatingBottomBar(
-                selectedTab = MainNavigationTab.VIDEO,
-                onTabSelected = {}
-            )
-        }
-    }
-}
-
-@Preview(name = "Floating Bottom Bar - Light (Settings Selected)", showBackground = true)
-@Composable
-fun PreviewFloatingBottomBarLightSettings() {
-    LilithTheme(darkTheme = false) {
-        Box(
-            modifier = Modifier
-                .background(NeumorphicTokens.LightBackground)
-                .padding(24.dp)
-        ) {
-            NeumorphicFloatingBottomBar(
-                selectedTab = MainNavigationTab.SETTINGS,
-                onTabSelected = {}
-            )
-        }
-    }
-}
-
-@Preview(name = "Floating Bottom Bar - Dark (Music Selected)", showBackground = true)
-@Composable
-fun PreviewFloatingBottomBarDarkMusic() {
-    LilithTheme(darkTheme = true) {
-        Box(
-            modifier = Modifier
-                .background(NeumorphicTokens.DarkBackground)
-                .padding(24.dp)
-        ) {
-            NeumorphicFloatingBottomBar(
-                selectedTab = MainNavigationTab.MUSIC,
-                onTabSelected = {}
-            )
-        }
-    }
-}
-
-@Preview(name = "Floating Bottom Bar - Dark (Video Selected)", showBackground = true)
-@Composable
-fun PreviewFloatingBottomBarDarkVideo() {
-    LilithTheme(darkTheme = true) {
-        Box(
-            modifier = Modifier
-                .background(NeumorphicTokens.DarkBackground)
-                .padding(24.dp)
-        ) {
-            NeumorphicFloatingBottomBar(
-                selectedTab = MainNavigationTab.VIDEO,
-                onTabSelected = {}
-            )
-        }
-    }
-}
-
-@Preview(name = "Floating Bottom Bar - Dark (Settings Selected)", showBackground = true)
-@Composable
-fun PreviewFloatingBottomBarDarkSettings() {
-    LilithTheme(darkTheme = true) {
-        Box(
-            modifier = Modifier
-                .background(NeumorphicTokens.DarkBackground)
-                .padding(24.dp)
-        ) {
-            NeumorphicFloatingBottomBar(
-                selectedTab = MainNavigationTab.SETTINGS,
-                onTabSelected = {}
-            )
-        }
-    }
-}
-

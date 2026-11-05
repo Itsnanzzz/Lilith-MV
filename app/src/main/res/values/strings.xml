@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Lilith MV</string>
 
@@ -9,7 +10,6 @@
     <!-- Tab Musik -->
     <string name="tab_songs">Lagu</string>
     <string name="tab_albums">Album</string>
-    <string name="tab_artists">Artis</string>
     <string name="tab_folders">Folder</string>
     <string name="tab_playlists">Playlist</string>
 
@@ -19,17 +19,24 @@
     <string name="scan_library">Pindai Ulang Pustaka</string>
     <string name="open_saf_file">Buka Berkas…</string>
     <string name="open_saf_folder">Buka Folder…</string>
+    <string name="filter_all_count">Semua (%1$d)</string>
 
     <!-- Pemutar Musik & Antrean -->
     <string name="now_playing">Sedang Memutar</string>
     <string name="queue_title">Antrean Putar</string>
     <string name="queue_empty">Antrean kosong</string>
     <string name="add_to_queue">Tambah ke Antrean</string>
+    <string name="add_to_playlist">Tambah ke Playlist</string>
     <string name="clear_queue">Kosongkan Antrean</string>
     <string name="play_next">Putar Berikutnya</string>
     <string name="unknown_artist">Artis Tidak Dikenal</string>
     <string name="unknown_album">Album Tidak Dikenal</string>
     <string name="unknown_title">Judul Tidak Diketahui</string>
+    <string name="default_song_title">Lagu</string>
+    <string name="default_album_title">Album</string>
+    <string name="default_storage_folder">Penyimpanan</string>
+    <string name="default_video_folder">Video</string>
+    <string name="default_audio_track">Trek Audio</string>
     <string name="format_lossy">LOSSY</string>
     <string name="format_lossless">LOSSLESS</string>
 
@@ -43,11 +50,14 @@
     <string name="repeat_mode_all">Ulang: Semua</string>
     <string name="shuffle_on">Acak Aktif</string>
     <string name="shuffle_off">Acak Nonaktif</string>
+    <string name="shuffle_action">Acak</string>
     <string name="playback_speed">Kecepatan Putar</string>
     <string name="sleep_timer">Pengatur Waktu Tidur</string>
     <string name="sleep_timer_off">Mati</string>
     <string name="sleep_timer_minutes">%1$d Menit</string>
     <string name="sleep_timer_set">Timer tidur diatur untuk %1$d menit</string>
+    <string name="sleep_timer_active">Timer aktif: %1$d menit tersisa</string>
+    <string name="sleep_timer_select_duration">Pilih durasi tidur:</string>
 
     <!-- Ekualiser -->
     <string name="equalizer_title">Ekualiser Audio</string>
@@ -61,12 +71,22 @@
     <string name="playlist_name_hint">Nama Playlist</string>
     <string name="playlist_save">Simpan</string>
     <string name="playlist_cancel">Batal</string>
+    <string name="close">Tutup</string>
+    <string name="reset">Reset</string>
     <string name="playlist_delete">Hapus Playlist</string>
+    <string name="delete">Hapus</string>
+    <string name="up">Naik</string>
+    <string name="down">Turun</string>
     <string name="playlist_add_success">Lagu berhasil ditambahkan ke playlist</string>
     <string name="playlist_remove_song">Hapus dari Playlist</string>
     <string name="playlist_song_removed">Dihapus dari playlist</string>
     <string name="undo">Urungkan</string>
     <string name="playlist_empty">Playlist kosong</string>
+    <string name="playlist_favorit">Favorit</string>
+    <string name="playlist_add_to">+ %1$s</string>
+    <string name="playlist_chill_vibes">Chill Vibes</string>
+    <string name="playlist_none_title">Belum ada playlist</string>
+    <string name="playlist_none_subtitle">Buat playlist untuk mengumpulkan lagu favorit Anda</string>
 
     <!-- Hapus Berkas Permanen -->
     <string name="delete_permanently">Hapus Permanen</string>
@@ -76,7 +96,16 @@
     <string name="delete_permanent_cancel">Batal</string>
     <string name="song_deleted">Lagu dihapus</string>
     <string name="delete_failed">Gagal menghapus lagu</string>
+    <string name="delete_failed_with_reason">Gagal menghapus lagu: %1$s</string>
     <string name="storage_permission_required">Izin penyimpanan diperlukan untuk menghapus berkas</string>
+    <string name="delete_error_invalid_uri">URI berkas tidak valid</string>
+    <string name="delete_error_doc_readonly">Gagal menghapus berkas dokumen (izin mungkin hanya baca)</string>
+    <string name="delete_error_readonly_permission">Izin hanya baca: tidak dapat menghapus berkas dokumen</string>
+    <string name="delete_error_doc_generic">Gagal menghapus berkas dokumen</string>
+    <string name="delete_error_request_failed">Gagal membuat permintaan hapus</string>
+    <string name="delete_error_generic">Gagal menghapus berkas</string>
+    <string name="delete_error_file_not_found">Berkas tidak ditemukan</string>
+    <string name="delete_error_permission_denied">Izin ditolak</string>
 
     <!-- Pemutar Video -->
     <string name="video_title">Pemutar Video</string>
@@ -89,10 +118,28 @@
     <string name="aspect_ratio_mode_fit">Pas Layar</string>
     <string name="aspect_ratio_mode_fill">Isi Layar</string>
     <string name="aspect_ratio_mode_zoom">Zoom</string>
-    <string name="rotation_lock">Kunci Orientasi</string>
-    <string name="rotation_unlocked">Orientasi Otomatis</string>
+    <string name="rotate_to_landscape">Putar ke landscape</string>
+    <string name="rotate_to_portrait">Putar ke potret</string>
+    <string name="rotation_not_supported">Rotasi tidak didukung di mode ini</string>
+    <string name="rewind_10_seconds">Mundur 10 detik</string>
+    <string name="forward_10_seconds">Maju 10 detik</string>
     <string name="loop_on">Ulang Aktif</string>
     <string name="loop_off">Ulang Nonaktif</string>
+    <string name="loop">Ulangi Video</string>
+    <string name="touch_lock">Kunci Layar</string>
+    <string name="touch_unlock">Buka Kunci Layar</string>
+    <string name="screen_locked">Layar terkunci</string>
+    <string name="mute">Bisukan</string>
+    <string name="unmute">Bunyikan</string>
+    <string name="audio_only">Mode Hanya Audio</string>
+    <string name="audio_only_on">Mode Hanya Audio Aktif</string>
+    <string name="audio_only_off">Mode Video Aktif</string>
+    <string name="more_options">Opsi Lainnya</string>
+    <string name="back">Kembali</string>
+    <string name="play">Putar</string>
+    <string name="pause">Jeda</string>
+    <string name="brightness_level">Tingkat Kecerahan</string>
+    <string name="volume_level">Tingkat Volume</string>
     <string name="pip_mode">Gambar dalam Gambar (PiP)</string>
     <string name="audio_tracks">Pilihan Trek Audio</string>
     <string name="audio_track_default">Trek Audio Standar</string>
@@ -101,14 +148,25 @@
     <string name="subtitle_title">Trek Subtitle</string>
     <string name="subtitle_none">Tanpa Subtitle (Mati)</string>
     <string name="subtitle_add_external">Pilih Berkas Subtitle (.srt, .vtt, .ass)…</string>
+    <string name="subtitle_external_file">Berkas Eksternal</string>
+    <string name="subtitle_external_ext">Eksternal (%1$s)</string>
+    <string name="subtitle_manual_label">%1$s (Manual)</string>
     <string name="subtitle_settings">Pengaturan Subtitle</string>
+    <string name="subtitle_customize_style">Kustomisasi Gaya Subtitle</string>
+    <string name="subtitle_live_preview">Pratinjau Langsung</string>
+    <string name="subtitle_sample_text">Lilith MV — Contoh Teks Subtitle</string>
     <string name="subtitle_font_size">Ukuran Teks</string>
     <string name="subtitle_color">Warna Teks</string>
+    <string name="subtitle_color_white">Putih</string>
+    <string name="subtitle_color_yellow">Kuning</string>
+    <string name="subtitle_color_cyan">Cyan</string>
     <string name="subtitle_background">Latar Belakang Teks</string>
     <string name="subtitle_delay">Sinkronisasi Penundaan</string>
     <string name="subtitle_delay_seconds">%1$+.1f detik</string>
     <string name="subtitle_ass_note">Catatan: Format .ass/.ssa ditampilkan dalam mode teks dasar.</string>
     <string name="subtitle_no_tracks">Tidak ada trek subtitle tersedia</string>
+    <string name="subtitle_lang_auto">Otomatis</string>
+    <string name="subtitle_lang_japanese">日本語</string>
 
     <!-- Izin & Keamanan -->
     <string name="permission_title">Izin Akses Media</string>
@@ -126,15 +184,34 @@
     <string name="settings_theme_dark">Gelap</string>
     <string name="settings_theme_light">Terang</string>
     <string name="settings_gapless">Putar Tanpa Jeda</string>
+    <string name="settings_gapless_desc">Transisi audio tanpa henti</string>
     <string name="settings_pause_on_headset">Jeda saat Headset Lepas</string>
+    <string name="settings_pause_on_headset_desc">Jeda saat earphone terputus</string>
     <string name="settings_preferred_subtitle_lang">Bahasa Subtitle</string>
+    <string name="settings_accent_color">Warna Aksen</string>
+    <string name="accent_white">Putih</string>
+    <string name="accent_blue">Biru</string>
+    <string name="accent_green">Hijau</string>
+    <string name="accent_yellow">Kuning</string>
+    <string name="accent_red">Merah</string>
+    <string name="accent_orange">Oranye</string>
+    <string name="accent_purple">Ungu</string>
+    <string name="settings_app_language">Bahasa Aplikasi</string>
+    <string name="lang_indonesian">Indonesia</string>
+    <string name="lang_english">English</string>
     <string name="settings_about">Tentang</string>
     <string name="settings_version">Lilith MV v1.0.0</string>
     <string name="settings_app_desc">Pemutar media native ringan dengan dukungan audio lossless dan subtitle multi-format.</string>
 
     <!-- Pesan & Kesalahan -->
     <string name="error_unsupported_codec">Format berkas atau codec tidak didukung oleh perangkat ini.</string>
+    <string name="error_codec_fallback">Codec tidak didukung</string>
     <string name="error_skipping_next">Melewati ke trek berikutnya…</string>
     <string name="empty_music_list">Belum ada file musik ditemukan di perangkat ini.</string>
     <string name="empty_video_list">Belum ada file video ditemukan di perangkat ini.</string>
+    <string name="empty_video_subtitle">Pindai ulang atau buka berkas dari penyimpanan</string>
+    <plurals name="songs_count">
+        <item quantity="one">%1$d Lagu</item>
+        <item quantity="other">%1$d Lagu</item>
+    </plurals>
 </resources>

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
@@ -28,22 +29,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.data.model.AudioFormatInfo
 import com.example.data.model.AudioTrack
 import com.example.ui.common.MediaFormatBadge
 import com.example.ui.common.MusicThumbnail
+import com.example.ui.theme.AppThemeTokens
+import com.example.ui.theme.AppTokens
 import com.example.ui.theme.LilithTheme
-import com.example.ui.theme.NeumorphLevel
-import com.example.ui.theme.NeumorphStyle
-import com.example.ui.theme.NeumorphicIconButton
-import com.example.ui.theme.NeumorphicTheme
-import com.example.ui.theme.neumorphic
 
+/**
+ * Standalone clean, flat Mini Player Card matching reference layout:
+ * - Sleek dark container (miniPlayerSurface) with 16dp rounded corners
+ * - 40dp album art with 8dp radius
+ * - SemiBold white title, muted artist, format badge
+ * - 36dp circular white play/pause button
+ * - Flat skip next icon button
+ * - 2.5dp progress line along bottom edge
+ */
 @Composable
 fun MiniPlayer(
     currentTrack: AudioTrack?,
@@ -58,30 +68,19 @@ fun MiniPlayer(
 ) {
     if (currentTrack == null) return
 
-    val colors = NeumorphicTheme.colors
+    val colors = AppThemeTokens.colors
     val progress = if (durationMs > 0) {
         (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
     } else 0f
 
-    val panelShape = RoundedCornerShape(20.dp)
-    // Reduce shadow offset/blur by one step in dark theme (MEDIUM -> SMALL) to eliminate glowing halo
-    val panelLevel = if (colors.isDark) NeumorphLevel.SMALL else NeumorphLevel.MEDIUM
+    val cardShape = RoundedCornerShape(AppTokens.Radius16)
 
-    // NOTE: This is an intentional exception to the "all surfaces share the background color"
-    // neumorphic rule: the mini player acts as a floating layer, so it gets its own tonal surface.
     Box(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp)
-            .neumorphic(
-                shape = panelShape,
-                level = panelLevel,
-                style = NeumorphStyle.RAISED,
-                lightShadowColorOverride = colors.miniPlayerLightShadow,
-                darkShadowColorOverride = colors.miniPlayerDarkShadow,
-                backgroundColorOverride = colors.miniPlayerSurface
-            )
-            .clip(panelShape)
+            .clip(cardShape)
+            .background(colors.miniPlayerSurface)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -90,61 +89,18 @@ fun MiniPlayer(
             .testTag("mini_player")
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            val trackTopCorners = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
-            // Progress Track: in dark theme, avoid blur filters so there is no outer halo or bleeding
-            val trackModifier = if (colors.isDark) {
-                Modifier
-                    .fillMaxWidth()
-                    .height(3.5.dp)
-                    .clip(trackTopCorners)
-                    .background(colors.miniPlayerDarkShadow)
-            } else {
-                Modifier
-                    .fillMaxWidth()
-                    .height(3.5.dp)
-                    .neumorphic(
-                        shape = trackTopCorners,
-                        level = NeumorphLevel.SMALL,
-                        style = NeumorphStyle.PRESSED,
-                        lightShadowColorOverride = colors.miniPlayerLightShadow,
-                        darkShadowColorOverride = colors.miniPlayerDarkShadow,
-                        backgroundColorOverride = colors.miniPlayerSurface
-                    )
-                    .clip(trackTopCorners)
-            }
-
-            Box(modifier = trackModifier) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(progress)
-                        .fillMaxHeight()
-                        .clip(trackTopCorners)
-                        .background(colors.miniPlayerAccent)
-                )
-            }
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Album Art container: Raised rounded container using mini player surface and shadows
-                val artShape = RoundedCornerShape(12.dp)
+                // Album Art (~40dp, rounded 8dp)
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
-                        .neumorphic(
-                            shape = artShape,
-                            level = NeumorphLevel.SMALL,
-                            style = NeumorphStyle.RAISED,
-                            lightShadowColorOverride = colors.miniPlayerLightShadow,
-                            darkShadowColorOverride = colors.miniPlayerDarkShadow,
-                            backgroundColorOverride = colors.miniPlayerSurface
-                        )
-                        .clip(artShape)
-                        .padding(2.dp) // Inset border well
-                        .clip(RoundedCornerShape(10.dp)),
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(AppTokens.Radius8))
+                        .background(colors.surfaceMuted),
                     contentAlignment = Alignment.Center
                 ) {
                     val artTarget = currentTrack.albumArtUri?.takeIf { it.isNotBlank() } ?: currentTrack.uri
@@ -157,7 +113,7 @@ fun MiniPlayer(
 
                 Spacer(modifier = Modifier.width(12.dp))
 
-                // Track Title, Artist, Lossy/Lossless badge
+                // Title, Artist, and Format badge
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = currentTrack.title,
@@ -173,9 +129,7 @@ fun MiniPlayer(
                         MediaFormatBadge(
                             formatInfo = formatInfo,
                             surfaceOverride = colors.miniPlayerSurface,
-                            lightShadowOverride = colors.miniPlayerLightShadow,
-                            darkShadowOverride = colors.miniPlayerDarkShadow,
-                            textColorOverride = if (formatInfo.isLossless) colors.miniPlayerAccent else colors.miniPlayerTextSecondary
+                            textColorOverride = colors.miniPlayerTextSecondary
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
@@ -191,59 +145,75 @@ fun MiniPlayer(
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                // Neumorphic Play/Pause Button: raised circular button derived from mini player surface
-                NeumorphicIconButton(
-                    onClick = onTogglePlayPause,
-                    size = 40.dp,
-                    level = NeumorphLevel.SMALL,
-                    contentDescription = if (isPlaying) "Jeda" else "Putar",
-                    lightShadowColorOverride = colors.miniPlayerLightShadow,
-                    darkShadowColorOverride = colors.miniPlayerDarkShadow,
-                    backgroundColorOverride = colors.miniPlayerSurface,
-                    icon = {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            tint = colors.miniPlayerAccent,
-                            modifier = Modifier.size(22.dp)
+                // Play/Pause Button (36dp filled circle)
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(colors.miniPlayerTextPrimary)
+                        .clickable(
+                            role = Role.Button,
+                            onClick = onTogglePlayPause
                         )
-                    },
-                    modifier = Modifier.testTag("mini_player_play_pause")
-                )
+                        .testTag("mini_player_play_pause"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) stringResource(R.string.control_pause) else stringResource(R.string.control_play),
+                        tint = colors.miniPlayerSurface,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
 
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
 
-                // Neumorphic Skip Button: raised circular button derived from mini player surface
-                NeumorphicIconButton(
-                    onClick = onSkipNext,
-                    size = 40.dp,
-                    level = NeumorphLevel.SMALL,
-                    contentDescription = "Berikutnya",
-                    lightShadowColorOverride = colors.miniPlayerLightShadow,
-                    darkShadowColorOverride = colors.miniPlayerDarkShadow,
-                    backgroundColorOverride = colors.miniPlayerSurface,
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Default.SkipNext,
-                            contentDescription = null,
-                            tint = colors.miniPlayerTextSecondary,
-                            modifier = Modifier.size(20.dp)
+                // Skip Next Button (36dp flat icon)
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .clickable(
+                            role = Role.Button,
+                            onClick = onSkipNext
                         )
-                    },
-                    modifier = Modifier.testTag("mini_player_skip_next")
+                        .testTag("mini_player_skip_next"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SkipNext,
+                        contentDescription = stringResource(R.string.control_next),
+                        tint = colors.miniPlayerTextSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            // Progress line along bottom edge of card
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.5.dp)
+                    .background(colors.miniPlayerTextSecondary.copy(alpha = 0.25f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(progress)
+                        .fillMaxHeight()
+                        .background(colors.miniPlayerTextPrimary)
                 )
             }
         }
     }
 }
 
-@Preview(name = "MiniPlayer - Light", showBackground = true, backgroundColor = 0xFFE0E5EC)
+@Preview(name = "MiniPlayer - Light", showBackground = true, backgroundColor = 0xFFFFFFFF)
 @Composable
 fun MiniPlayerLightPreview() {
     LilithTheme(darkTheme = false) {
         Box(
             modifier = Modifier
-                .background(Color(0xFFE0E5EC))
+                .background(Color(0xFFFFFFFF))
                 .padding(16.dp)
         ) {
             MiniPlayer(
@@ -267,13 +237,13 @@ fun MiniPlayerLightPreview() {
     }
 }
 
-@Preview(name = "MiniPlayer - Dark", showBackground = true, backgroundColor = 0xFF2B2F36)
+@Preview(name = "MiniPlayer - Dark", showBackground = true, backgroundColor = 0xFF0E1117)
 @Composable
 fun MiniPlayerDarkPreview() {
     LilithTheme(darkTheme = true) {
         Box(
             modifier = Modifier
-                .background(Color(0xFF2B2F36))
+                .background(Color(0xFF0E1117))
                 .padding(16.dp)
         ) {
             MiniPlayer(

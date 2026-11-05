@@ -25,6 +25,7 @@ import com.example.data.model.AspectRatioMode
 import com.example.data.model.SubtitleSettings
 import com.example.data.model.SubtitleTrackInfo
 import com.example.data.model.VideoItem
+import com.example.ui.common.getAppString
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -51,7 +52,6 @@ data class VideoPlayerUiState(
     val durationMs: Long = 0L,
     val controlsVisible: Boolean = true,
     val aspectRatioMode: AspectRatioMode = AspectRatioMode.FIT,
-    val isLockedRotation: Boolean = false,
     val isLooping: Boolean = false,
     val playbackSpeed: Float = 1.0f,
     val audioTracks: List<AudioTrackChoice> = emptyList(),
@@ -60,6 +60,8 @@ data class VideoPlayerUiState(
     val subtitleSettings: SubtitleSettings = SubtitleSettings(),
     val resumePositionMs: Long? = null,
     val isControlsLocked: Boolean = false,
+    val isMuted: Boolean = false,
+    val isAudioOnly: Boolean = false,
     val errorMessage: String? = null,
     // Gesture feedback overlays
     val volumeLevel: Float? = null, // 0.0 - 1.0, null if hidden
@@ -115,8 +117,9 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
-                        val message = getApplication<Application>().getString(R.string.error_unsupported_codec) +
-                                "\n(" + (error.localizedMessage ?: "Codec tidak didukung") + ")"
+                        val app = getApplication<Application>()
+                        val message = app.getAppString(R.string.error_unsupported_codec) +
+                                "\n(" + (error.localizedMessage ?: app.getAppString(R.string.error_codec_fallback)) + ")"
                         _uiState.value = _uiState.value.copy(errorMessage = message)
                     }
                 })
@@ -225,12 +228,17 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
             if (it.isPlaying) {
                 it.pause()
                 _uiState.value = _uiState.value.copy(controlsVisible = true)
-                autoHideJob?.cancel()
+                scheduleControlsAutoHide()
             } else {
                 it.play()
                 scheduleControlsAutoHide()
             }
         }
+    }
+
+    companion object {
+        const val SEEK_DELTA_SECONDS = 10
+        const val SEEK_DELTA_MS = 10_000L
     }
 
     fun seekTo(positionMs: Long) {
@@ -239,10 +247,25 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
         _uiState.value = _uiState.value.copy(currentPositionMs = positionMs)
     }
 
+    fun seekRelative(deltaMs: Long) {
+        player?.let { p ->
+            val current = p.currentPosition
+            val duration = if (p.duration > 0) p.duration else _uiState.value.durationMs
+            val newPos = if (duration > 0) {
+                (current + deltaMs).coerceIn(0L, duration)
+            } else {
+                (current + deltaMs).coerceAtLeast(0L)
+            }
+            p.seekTo(newPos)
+            _currentPositionMs.value = newPos
+            _uiState.value = _uiState.value.copy(currentPositionMs = newPos)
+        }
+    }
+
     fun doubleTapSeek(deltaSeconds: Int) {
         player?.let { p ->
             val current = p.currentPosition
-            val newPos = (current + deltaSeconds * 1000).coerceIn(0, p.duration.coerceAtLeast(0L))
+            val newPos = (current + deltaSeconds * 1000L).coerceIn(0L, p.duration.coerceAtLeast(0L))
             p.seekTo(newPos)
             _currentPositionMs.value = newPos
             _uiState.value = _uiState.value.copy(
@@ -293,13 +316,11 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
         autoHideJob?.cancel()
     }
 
-    fun scheduleControlsAutoHide() {
+    fun scheduleControlsAutoHide(delayMs: Long = 3000L) {
         autoHideJob?.cancel()
         autoHideJob = viewModelScope.launch {
-            delay(3500)
-            if (_uiState.value.isPlaying) {
-                _uiState.value = _uiState.value.copy(controlsVisible = false)
-            }
+            delay(delayMs)
+            _uiState.value = _uiState.value.copy(controlsVisible = false)
         }
     }
 
@@ -312,8 +333,30 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
         _uiState.value = _uiState.value.copy(aspectRatioMode = next)
     }
 
-    fun toggleRotationLock() {
-        _uiState.value = _uiState.value.copy(isLockedRotation = !_uiState.value.isLockedRotation)
+    fun toggleTouchLock() {
+        val newLock = !_uiState.value.isControlsLocked
+        _uiState.value = _uiState.value.copy(
+            isControlsLocked = newLock,
+            controlsVisible = !newLock
+        )
+    }
+
+    fun setTouchLocked(locked: Boolean) {
+        _uiState.value = _uiState.value.copy(
+            isControlsLocked = locked,
+            controlsVisible = !locked
+        )
+    }
+
+    fun toggleMute() {
+        val newMute = !_uiState.value.isMuted
+        player?.volume = if (newMute) 0f else 1f
+        _uiState.value = _uiState.value.copy(isMuted = newMute)
+    }
+
+    fun toggleAudioOnly() {
+        val newAudioOnly = !_uiState.value.isAudioOnly
+        _uiState.value = _uiState.value.copy(isAudioOnly = newAudioOnly)
     }
 
     fun toggleLooping() {
@@ -339,7 +382,8 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
             if (group.type == C.TRACK_TYPE_AUDIO) {
                 for (t in 0 until trackGroup.length) {
                     val format = trackGroup.getFormat(t)
-                    val lang = format.language?.uppercase() ?: "AUDIO ${t + 1}"
+                    val defaultAudioLabel = getApplication<Application>().getAppString(R.string.default_audio_track)
+                    val lang = format.language?.uppercase() ?: "$defaultAudioLabel ${t + 1}"
                     val label = format.label ?: lang
                     audioList.add(
                         AudioTrackChoice(
@@ -356,7 +400,8 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     val subId = "sub_${g}_$t"
                     val isSelected = group.isTrackSelected(t)
                     if (isSelected) selectedSubId = subId
-                    val lang = format.language?.uppercase() ?: "SUB ${t + 1}"
+                    val defaultSubLabel = getApplication<Application>().getAppString(R.string.subtitle_title)
+                    val lang = format.language?.uppercase() ?: "$defaultSubLabel ${t + 1}"
                     val label = format.label ?: lang
                     subList.add(
                         SubtitleTrackInfo(
@@ -439,7 +484,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
         val subInfo = SubtitleTrackInfo(
             id = uri.toString(),
-            label = "$fileName (Manual)",
+            label = getApplication<Application>().getAppString(R.string.subtitle_manual_label, fileName),
             language = "manual",
             uri = uri.toString(),
             mimeType = mime,

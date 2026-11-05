@@ -23,11 +23,11 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Subtitles
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -42,120 +43,301 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.ThemeMode
-import com.example.ui.theme.LocalNeumorphicColors
-import com.example.ui.theme.NeumorphLevel
-import com.example.ui.theme.NeumorphStyle
-import com.example.ui.theme.NeumorphicCard
-import com.example.ui.theme.NeumorphicChip
-import com.example.ui.theme.NeumorphicSwitch
-import com.example.ui.theme.neumorphic
+import com.example.ui.theme.AppChip
+import com.example.ui.theme.AppPrimaryButton
+import com.example.ui.theme.AppSecondaryButton
+import com.example.ui.theme.AppSegmentedControl
+import com.example.ui.theme.AppSwitch
+import com.example.ui.theme.AppThemeTokens
+import com.example.ui.theme.AppTokens
+import com.example.ui.theme.AppTypography
+import com.example.ui.theme.LilithTheme
 import com.example.ui.video.SubtitleSettingsDialog
+import androidx.compose.foundation.border
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.tooling.preview.Preview
+import com.example.data.AppAccent
+import androidx.compose.material.icons.filled.Translate
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Clean, flat Settings Screen matching reference design:
+ * - Grouped sections inside surfaceMuted cards (16dp radius)
+ * - Modern AppSegmentedControl for Theme mode
+ * - "Warna Aksen" card with 7 circular swatches
+ * - Flat AppSwitch components for playback behavior toggles
+ * - AppChip row for subtitle language preferences
+ * - Clean AppSecondaryButton for subtitle customization dialog
+ */
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
     modifier: Modifier = Modifier
 ) {
-    val nc = LocalNeumorphicColors.current
+    val colors = AppThemeTokens.colors
     val themeMode by viewModel.themeMode.collectAsState()
+    val appAccent by viewModel.appAccent.collectAsState()
+    val appLanguage by viewModel.currentAppLanguage.collectAsState()
     val gapless by viewModel.gaplessPlayback.collectAsState()
     val pauseOnHeadset by viewModel.pauseOnHeadsetUnplug.collectAsState()
     val subtitleLang by viewModel.preferredSubtitleLanguage.collectAsState()
     val subtitleSettings by viewModel.subtitleSettings.collectAsState()
 
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val activeConfigLang = remember(configuration) {
+        com.example.ui.common.normalizeLanguageTag(configuration.locales.get(0))
+    }
+
     var showSubtitleStyleDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(activeConfigLang) {
+        viewModel.refreshAppLanguage(activeConfigLang)
+    }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(nc.background)
+            .background(colors.background)
             .verticalScroll(rememberScrollState())
-            .padding(16.dp)
+            .padding(horizontal = AppTokens.ScreenHorizontalPadding, vertical = 16.dp)
             .testTag("settings_screen")
     ) {
         Text(
             text = stringResource(R.string.settings_title),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = nc.textPrimary
+            style = AppTypography.screenTitle,
+            color = colors.textPrimary
         )
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         // 1. Theme Mode Card
-        NeumorphicCard(
-            shape = RoundedCornerShape(18.dp),
-            level = NeumorphLevel.SMALL,
-            style = NeumorphStyle.RAISED,
-            modifier = Modifier.fillMaxWidth()
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(AppTokens.Radius16))
+                .background(colors.surfaceMuted)
+                .padding(16.dp)
         ) {
-            Column(modifier = Modifier.padding(14.dp)) {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .neumorphic(
-                                shape = CircleShape,
-                                level = NeumorphLevel.SMALL,
-                                style = NeumorphStyle.RAISED
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.DarkMode,
-                            contentDescription = null,
-                            tint = nc.accent,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.DarkMode,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = stringResource(R.string.settings_theme),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = nc.textPrimary
+                        style = AppTypography.listTitle,
+                        color = colors.textPrimary
                     )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
+
+                val themeOptions = listOf(ThemeMode.SYSTEM, ThemeMode.DARK, ThemeMode.LIGHT)
+
+                val systemLabel = stringResource(R.string.settings_theme_system)
+                val darkLabel = stringResource(R.string.settings_theme_dark)
+                val lightLabel = stringResource(R.string.settings_theme_light)
+
+                AppSegmentedControl(
+                    items = themeOptions,
+                    selectedItem = themeMode,
+                    onItemSelected = { viewModel.setThemeMode(it) },
+                    labelProvider = { mode ->
+                        when (mode) {
+                            ThemeMode.SYSTEM -> systemLabel
+                            ThemeMode.DARK -> darkLabel
+                            ThemeMode.LIGHT -> lightLabel
+                        }
+                    },
+                    itemTestTagProvider = { "theme_option_${it.name.lowercase()}" },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // 1.5. Accent Color Card
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(AppTokens.Radius16))
+                .background(colors.surfaceMuted)
+                .padding(16.dp)
+                .testTag("accent_color_card")
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Palette,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = stringResource(R.string.settings_accent_color),
+                        style = AppTypography.listTitle,
+                        color = colors.textPrimary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                val accents = AppAccent.values()
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectableGroup(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    NeumorphicChip(
-                        selected = themeMode == ThemeMode.SYSTEM,
-                        onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
-                        label = { Text(stringResource(R.string.settings_theme_system), fontSize = 12.sp) },
-                        modifier = Modifier.weight(1f)
+                    accents.forEach { accent ->
+                        val isSelected = appAccent == accent
+                        val accentColors = AppTokens.resolveAccentColors(accent, colors.isDark)
+                        val swatchColor = accentColors.accent
+                        val onAccentColor = accentColors.onAccent
+                        val isWhiteSwatch = accent == AppAccent.WHITE
+
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .clickable(
+                                    role = Role.RadioButton,
+                                    onClick = { viewModel.setAccentColor(accent) }
+                                )
+                                .semantics { this.selected = isSelected }
+                                .then(
+                                    if (isSelected) {
+                                        Modifier.border(
+                                            width = 2.5.dp,
+                                            color = if (isWhiteSwatch && !colors.isDark) colors.textPrimary else swatchColor,
+                                            shape = CircleShape
+                                        )
+                                    } else Modifier
+                                )
+                                .testTag("accent_swatch_${accent.name.lowercase()}"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(swatchColor)
+                                    .then(
+                                        if (isWhiteSwatch) {
+                                            Modifier.border(1.dp, colors.hairline, CircleShape)
+                                        } else Modifier
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = onAccentColor,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                val selectedAccentName = when (appAccent) {
+                    AppAccent.WHITE -> stringResource(R.string.accent_white)
+                    AppAccent.BLUE -> stringResource(R.string.accent_blue)
+                    AppAccent.GREEN -> stringResource(R.string.accent_green)
+                    AppAccent.YELLOW -> stringResource(R.string.accent_yellow)
+                    AppAccent.RED -> stringResource(R.string.accent_red)
+                    AppAccent.ORANGE -> stringResource(R.string.accent_orange)
+                    AppAccent.PURPLE -> stringResource(R.string.accent_purple)
+                }
+
+                Text(
+                    text = selectedAccentName,
+                    style = AppTypography.caption.copy(fontSize = 13.sp),
+                    color = colors.textSecondary,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // 1.6. App Language Card
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(AppTokens.Radius16))
+                .background(colors.surfaceMuted)
+                .padding(16.dp)
+                .testTag("app_language_card")
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Translate,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier.size(20.dp)
                     )
-                    NeumorphicChip(
-                        selected = themeMode == ThemeMode.DARK,
-                        onClick = { viewModel.setThemeMode(ThemeMode.DARK) },
-                        label = { Text(stringResource(R.string.settings_theme_dark), fontSize = 12.sp) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    NeumorphicChip(
-                        selected = themeMode == ThemeMode.LIGHT,
-                        onClick = { viewModel.setThemeMode(ThemeMode.LIGHT) },
-                        label = { Text(stringResource(R.string.settings_theme_light), fontSize = 12.sp) },
-                        modifier = Modifier.weight(1f)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = stringResource(R.string.settings_app_language),
+                        style = AppTypography.listTitle,
+                        color = colors.textPrimary
                     )
                 }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                val langOptions = listOf("id", "en")
+                val indonesianLabel = stringResource(R.string.lang_indonesian)
+                val englishLabel = stringResource(R.string.lang_english)
+                AppSegmentedControl(
+                    items = langOptions,
+                    selectedItem = appLanguage,
+                    onItemSelected = { tag ->
+                        viewModel.setAppLanguage(
+                            tag = tag,
+                            activeConfigLanguage = activeConfigLang,
+                            activity = context as? android.app.Activity
+                        )
+                    },
+                    labelProvider = { tag ->
+                        if (tag == "id") indonesianLabel else englishLabel
+                    },
+                    itemTestTagProvider = { "lang_option_$it" },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
 
         Spacer(modifier = Modifier.height(14.dp))
 
         // 2. Playback Behavior (Gapless & Pause on Headset Unplug)
-        NeumorphicCard(
-            shape = RoundedCornerShape(18.dp),
-            level = NeumorphLevel.SMALL,
-            style = NeumorphStyle.RAISED,
-            modifier = Modifier.fillMaxWidth()
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(AppTokens.Radius16))
+                .background(colors.surfaceMuted)
+                .padding(16.dp)
         ) {
-            Column(modifier = Modifier.padding(14.dp)) {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 // Gapless Playback
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -165,50 +347,39 @@ fun SettingsScreen(
                     Row(
                         modifier = Modifier
                             .weight(1f)
-                            .padding(end = 8.dp),
+                            .padding(end = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .neumorphic(
-                                    shape = CircleShape,
-                                    level = NeumorphLevel.SMALL,
-                                    style = NeumorphStyle.RAISED
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.GraphicEq,
-                                contentDescription = null,
-                                tint = nc.accent,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.GraphicEq,
+                            contentDescription = null,
+                            tint = colors.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
                                 text = stringResource(R.string.settings_gapless),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = nc.textPrimary
+                                style = AppTypography.listTitle.copy(fontSize = 14.sp),
+                                color = colors.textPrimary
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Transisi audio tanpa henti",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = nc.textSecondary,
-                                fontSize = 11.5.sp
+                                text = stringResource(R.string.settings_gapless_desc),
+                                style = AppTypography.listSubtitle,
+                                color = colors.textSecondary
                             )
                         }
                     }
-                    NeumorphicSwitch(
+                    AppSwitch(
                         checked = gapless,
                         onCheckedChange = { viewModel.setGaplessPlayback(it) },
                         modifier = Modifier.testTag("gapless_playback_switch")
                     )
                 }
 
+                Spacer(modifier = Modifier.height(14.dp))
+                HorizontalDivider(color = colors.hairline, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(14.dp))
 
                 // Pause on Headset Unplug
@@ -220,44 +391,31 @@ fun SettingsScreen(
                     Row(
                         modifier = Modifier
                             .weight(1f)
-                            .padding(end = 8.dp),
+                            .padding(end = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .neumorphic(
-                                    shape = CircleShape,
-                                    level = NeumorphLevel.SMALL,
-                                    style = NeumorphStyle.RAISED
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Headphones,
-                                contentDescription = null,
-                                tint = nc.accent,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.Headphones,
+                            contentDescription = null,
+                            tint = colors.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
                                 text = stringResource(R.string.settings_pause_on_headset),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = nc.textPrimary
+                                style = AppTypography.listTitle.copy(fontSize = 14.sp),
+                                color = colors.textPrimary
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Jeda saat earphone terputus",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = nc.textSecondary,
-                                fontSize = 11.5.sp
+                                text = stringResource(R.string.settings_pause_on_headset_desc),
+                                style = AppTypography.listSubtitle,
+                                color = colors.textSecondary
                             )
                         }
                     }
-                    NeumorphicSwitch(
+                    AppSwitch(
                         checked = pauseOnHeadset,
                         onCheckedChange = { viewModel.setPauseOnHeadsetUnplug(it) },
                         modifier = Modifier.testTag("pause_headset_switch")
@@ -268,38 +426,27 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // 3. Subtitle Preferences
-        NeumorphicCard(
-            shape = RoundedCornerShape(18.dp),
-            level = NeumorphLevel.SMALL,
-            style = NeumorphStyle.RAISED,
-            modifier = Modifier.fillMaxWidth()
+        // 3. Subtitle Preferences Card
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(AppTokens.Radius16))
+                .background(colors.surfaceMuted)
+                .padding(16.dp)
         ) {
-            Column(modifier = Modifier.padding(14.dp)) {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .neumorphic(
-                                shape = CircleShape,
-                                level = NeumorphLevel.SMALL,
-                                style = NeumorphStyle.RAISED
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Subtitles,
-                            contentDescription = null,
-                            tint = nc.accent,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.Subtitles,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = stringResource(R.string.subtitle_settings),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = nc.textPrimary
+                        style = AppTypography.listTitle,
+                        color = colors.textPrimary
                     )
                 }
 
@@ -307,9 +454,8 @@ fun SettingsScreen(
 
                 Text(
                     text = stringResource(R.string.settings_preferred_subtitle_lang),
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = nc.textSecondary
+                    style = AppTypography.label,
+                    color = colors.textSecondary
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -318,16 +464,16 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    NeumorphicChip(
+                    AppChip(
                         selected = subtitleLang == "auto",
                         onClick = { viewModel.setPreferredSubtitleLanguage("auto") },
-                        label = { Text("Otomatis", fontSize = 11.5.sp) },
+                        text = stringResource(R.string.subtitle_lang_auto),
                         modifier = Modifier.weight(1f)
                     )
-                    NeumorphicChip(
+                    AppChip(
                         selected = subtitleLang == "id",
                         onClick = { viewModel.setPreferredSubtitleLanguage("id") },
-                        label = { Text("Indonesia", fontSize = 11.5.sp) },
+                        text = stringResource(R.string.lang_indonesian),
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -338,88 +484,59 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    NeumorphicChip(
+                    AppChip(
                         selected = subtitleLang == "en",
                         onClick = { viewModel.setPreferredSubtitleLanguage("en") },
-                        label = { Text("English", fontSize = 11.5.sp) },
+                        text = stringResource(R.string.lang_english),
                         modifier = Modifier.weight(1f)
                     )
-                    NeumorphicChip(
+                    AppChip(
                         selected = subtitleLang == "ja",
                         onClick = { viewModel.setPreferredSubtitleLanguage("ja") },
-                        label = { Text("日本語", fontSize = 11.5.sp) },
+                        text = stringResource(R.string.subtitle_lang_japanese),
                         modifier = Modifier.weight(1f)
                     )
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                NeumorphicCard(
-                    shape = RoundedCornerShape(12.dp),
-                    level = NeumorphLevel.SMALL,
-                    style = NeumorphStyle.RAISED,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showSubtitleStyleDialog = true }
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 11.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Kustomisasi Gaya Subtitle",
-                            fontSize = 12.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = nc.accent
-                        )
-                    }
-                }
+                AppSecondaryButton(
+                    text = stringResource(R.string.subtitle_customize_style),
+                    onClick = { showSubtitleStyleDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
 
         Spacer(modifier = Modifier.height(14.dp))
 
         // 4. About App Card
-        NeumorphicCard(
-            shape = RoundedCornerShape(18.dp),
-            level = NeumorphLevel.SMALL,
-            style = NeumorphStyle.RAISED,
-            modifier = Modifier.fillMaxWidth()
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(AppTokens.Radius16))
+                .background(colors.surfaceMuted)
+                .padding(16.dp)
         ) {
-            Column(modifier = Modifier.padding(14.dp)) {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .neumorphic(
-                                shape = CircleShape,
-                                level = NeumorphLevel.SMALL,
-                                style = NeumorphStyle.RAISED
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = null,
-                            tint = nc.accent,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
                             text = stringResource(R.string.settings_about),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = nc.textPrimary
+                            style = AppTypography.listTitle,
+                            color = colors.textPrimary
                         )
                         Text(
                             text = stringResource(R.string.settings_version),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = nc.textSecondary,
-                            fontSize = 11.5.sp
+                            style = AppTypography.caption,
+                            color = colors.textSecondary
                         )
                     }
                 }
@@ -428,10 +545,8 @@ fun SettingsScreen(
 
                 Text(
                     text = stringResource(R.string.settings_app_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = nc.textSecondary,
-                    fontSize = 12.sp,
-                    lineHeight = 18.sp
+                    style = AppTypography.listSubtitle,
+                    color = colors.textSecondary
                 )
             }
         }
@@ -445,5 +560,44 @@ fun SettingsScreen(
             onSave = { viewModel.updateSubtitleSettings(it) },
             onDismiss = { showSubtitleStyleDialog = false }
         )
+    }
+}
+
+// =========================================================================
+// PREVIEWS FOR ACCENT COLORS
+// =========================================================================
+
+@Preview(name = "Accent Blue Sample - Light", showBackground = true, backgroundColor = 0xFFFFFFFF)
+@Composable
+fun PreviewAccentBlueLight() {
+    LilithTheme(darkTheme = false, appAccent = AppAccent.BLUE) {
+        AccentSampleDemo()
+    }
+}
+
+@Preview(name = "Accent Blue Sample - Dark", showBackground = true, backgroundColor = 0xFF0E1117)
+@Composable
+fun PreviewAccentBlueDark() {
+    LilithTheme(darkTheme = true, appAccent = AppAccent.BLUE) {
+        AccentSampleDemo()
+    }
+}
+
+@Composable
+private fun AccentSampleDemo() {
+    val colors = AppThemeTokens.colors
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.background)
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            AppChip(text = "Dipilih", selected = true, onClick = {})
+            AppChip(text = "Biasa", selected = false, onClick = {})
+        }
+        AppPrimaryButton(text = "Putar Musik", onClick = {})
+        AppSwitch(checked = true, onCheckedChange = {})
     }
 }
