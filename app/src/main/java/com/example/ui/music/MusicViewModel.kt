@@ -12,6 +12,8 @@ import com.example.LilithApplication
 import com.example.R
 import com.example.data.DeleteTrackResult
 import com.example.data.MediaRepository
+import com.example.data.RenameMediaResult
+import com.example.data.model.SongExtraInfo
 import com.example.data.db.PlaylistEntity
 import com.example.data.db.PlaylistSongEntity
 import com.example.data.model.AlbumItem
@@ -42,6 +44,12 @@ sealed class MusicDeleteEvent {
     data class ShowMessage(val message: String) : MusicDeleteEvent()
 }
 
+sealed class MusicActionEvent {
+    data class LaunchRenameIntentSender(val intentSender: IntentSender) : MusicActionEvent()
+    data class RequestRenameStoragePermission(val permission: String) : MusicActionEvent()
+    data class ShowMessage(val message: String) : MusicActionEvent()
+}
+
 data class MusicUiState(
     val selectedTab: MusicTab = MusicTab.SONGS,
     val searchQuery: String = "",
@@ -61,7 +69,11 @@ data class MusicUiState(
     val isSleepTimerDialogVisible: Boolean = false,
     val isCreatePlaylistDialogVisible: Boolean = false,
     val trackToDelete: AudioTrack? = null,
-    val isDeletingTrack: Boolean = false
+    val isDeletingTrack: Boolean = false,
+    val trackForInfo: AudioTrack? = null,
+    val trackToRename: AudioTrack? = null,
+    val isRenamingTrack: Boolean = false,
+    val operatingTrackId: Long? = null
 )
 
 class MusicViewModel(application: Application) : AndroidViewModel(application) {
@@ -75,6 +87,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _deleteEvents = MutableSharedFlow<MusicDeleteEvent>()
     val deleteEvents: SharedFlow<MusicDeleteEvent> = _deleteEvents.asSharedFlow()
+
+    private val _actionEvents = MutableSharedFlow<MusicActionEvent>()
+    val actionEvents: SharedFlow<MusicActionEvent> = _actionEvents.asSharedFlow()
+
+    private var pendingRename: Pair<AudioTrack, String>? = null
 
     val playlists = database.playlistDao().getAllPlaylists()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
@@ -294,6 +311,135 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setCreatePlaylistDialogVisible(visible: Boolean) {
         _uiState.value = _uiState.value.copy(isCreatePlaylistDialogVisible = visible)
+    }
+
+    // --- Info / Rename actions shared by every SongsListView ---
+    fun showTrackInfo(track: AudioTrack) {
+        _uiState.value = _uiState.value.copy(trackForInfo = track)
+    }
+
+    fun dismissTrackInfo() {
+        _uiState.value = _uiState.value.copy(trackForInfo = null)
+    }
+
+    suspend fun loadSongExtraInfo(track: AudioTrack): SongExtraInfo = repository.loadSongExtraInfo(track)
+
+    fun showRenameTrackDialog(track: AudioTrack) {
+        _uiState.value = _uiState.value.copy(trackToRename = track, isRenamingTrack = false)
+    }
+
+    fun dismissRenameTrackDialog() {
+        if (_uiState.value.isRenamingTrack) return
+        pendingRename = null
+        _uiState.value = _uiState.value.copy(trackToRename = null, isRenamingTrack = false, operatingTrackId = null)
+    }
+
+    suspend fun validateTrackName(track: AudioTrack, rawText: String): String? {
+        val trimmed = rawText.trim()
+        if (trimmed.isEmpty()) return getApplication<Application>().getString(R.string.rename_error_empty)
+        val invalidChars = listOf('/', '\\', ':', '*', '?', '"', '<', '>', '|')
+        if (rawText.any { it in invalidChars || it.code < 32 }) {
+            return getApplication<Application>().getString(R.string.rename_error_invalid_chars)
+        }
+        if (rawText.startsWith(".") || rawText.endsWith(".") || rawText.startsWith(" ") || rawText.endsWith(" ")) {
+            return getApplication<Application>().getString(R.string.rename_error_dots_spaces)
+        }
+        val extension = track.extension
+        val fullName = if (extension.isNotEmpty()) "$trimmed.$extension" else trimmed
+        if (fullName.toByteArray(Charsets.UTF_8).size > 255) {
+            return getApplication<Application>().getString(R.string.rename_error_too_long)
+        }
+        if (trimmed != track.baseName && repository.checkTrackNameExists(track, fullName)) {
+            return getApplication<Application>().getString(R.string.rename_error_already_exists)
+        }
+        return null
+    }
+
+    fun confirmRenameTrack(track: AudioTrack, newFullName: String) {
+        if (_uiState.value.isRenamingTrack) return
+        pendingRename = track to newFullName
+        _uiState.value = _uiState.value.copy(isRenamingTrack = true, operatingTrackId = track.id)
+        viewModelScope.launch {
+            when (val result = repository.renameTrack(track, newFullName)) {
+                is RenameMediaResult.Success -> onTrackRenamedSuccessfully(track, newFullName)
+                is RenameMediaResult.RequiresIntentSender -> _actionEvents.emit(MusicActionEvent.LaunchRenameIntentSender(result.intentSender))
+                is RenameMediaResult.RequiresPermission -> _actionEvents.emit(MusicActionEvent.RequestRenameStoragePermission(result.permission))
+                is RenameMediaResult.Error -> finishRenameFailure(result.message)
+            }
+        }
+    }
+
+    fun onRenameIntentSenderResult(approved: Boolean) {
+        val (track, newFullName) = pendingRename ?: return
+        viewModelScope.launch {
+            if (!approved) {
+                finishRenameFailure("")
+                return@launch
+            }
+            val updated = repository.performTrackRenameUpdate(track, newFullName)
+            if (updated || Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                onTrackRenamedSuccessfully(track, newFullName)
+            } else {
+                finishRenameFailure(getApplication<Application>().getString(R.string.rename_failed))
+            }
+        }
+    }
+
+    fun onRenameStoragePermissionResult(granted: Boolean) {
+        val rename = pendingRename ?: return
+        if (granted) {
+            confirmRenameTrack(rename.first, rename.second)
+        } else {
+            viewModelScope.launch { finishRenameFailure(getApplication<Application>().getString(R.string.storage_permission_required)) }
+        }
+    }
+
+    private suspend fun finishRenameFailure(message: String) {
+        pendingRename = null
+        _uiState.value = _uiState.value.copy(trackToRename = null, isRenamingTrack = false, operatingTrackId = null)
+        if (message.isNotBlank()) _actionEvents.emit(MusicActionEvent.ShowMessage(message))
+    }
+
+    private fun onTrackRenamedSuccessfully(track: AudioTrack, newFullName: String) {
+        viewModelScope.launch {
+            val oldUri = track.uri
+            val newPath = if (track.path.isNotEmpty()) {
+                val parent = File(track.path).parent ?: ""
+                if (parent.isNotEmpty()) "$parent/$newFullName" else newFullName
+            } else ""
+            val titleWasFileName = track.title == track.baseName
+            val updatedTrack = track.copy(
+                title = if (titleWasFileName) newFullName.substringBeforeLast('.') else track.title,
+                displayName = newFullName,
+                path = newPath
+            )
+
+            // PlaylistSongEntity uses audioUri and title. Move both references in one Room transaction.
+            database.playlistDao().migrateSongInAllPlaylists(oldUri, updatedTrack.uri, updatedTrack.title)
+
+            val updatedAll = _uiState.value.allTracks
+                .map { if (it.id == track.id || it.uri == oldUri) updatedTrack else it }
+                .sortedBy { it.title.lowercase() }
+            val updatedPlaylistSongs = _uiState.value.playlistSongs
+                .map { if (it.id == track.id || it.uri == oldUri) updatedTrack else it }
+            val updatedAlbums = repository.groupIntoAlbums(updatedAll)
+            val updatedFolders = repository.groupIntoFolders(updatedAll)
+
+            playerManager.updateTrackInPlayback(oldUri, updatedTrack)
+
+            _uiState.value = _uiState.value.copy(
+                allTracks = updatedAll,
+                filteredTracks = filterTracks(updatedAll, _uiState.value.searchQuery),
+                albums = updatedAlbums,
+                folders = updatedFolders,
+                playlistSongs = updatedPlaylistSongs,
+                trackToRename = null,
+                isRenamingTrack = false,
+                operatingTrackId = null
+            )
+            pendingRename = null
+            _actionEvents.emit(MusicActionEvent.ShowMessage(getApplication<Application>().getString(R.string.song_renamed)))
+        }
     }
 
     fun setEqualizerEnabled(enabled: Boolean) {

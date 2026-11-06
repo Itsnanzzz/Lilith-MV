@@ -17,14 +17,17 @@ import android.os.Build
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import androidx.core.content.ContextCompat
+import androidx.media3.common.C
 import com.example.R
 import com.example.data.model.AlbumItem
 import com.example.data.model.ArtistItem
 import com.example.data.model.AudioTrack
 import com.example.data.model.FolderItem
+import com.example.data.model.SongExtraInfo
 import com.example.data.model.SubtitleTrackInfo
 import com.example.data.model.VideoExtraInfo
 import com.example.data.model.VideoItem
+import com.example.playback.AudioFormatDetector
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -37,12 +40,13 @@ sealed class DeleteMediaResult {
     data class Error(val message: String) : DeleteMediaResult()
 }
 
-sealed class RenameVideoResult {
-    object Success : RenameVideoResult()
-    data class RequiresIntentSender(val intentSender: IntentSender, val video: VideoItem, val newFullName: String) : RenameVideoResult()
-    data class RequiresPermission(val permission: String, val video: VideoItem, val newFullName: String) : RenameVideoResult()
-    data class Error(val message: String) : RenameVideoResult()
+sealed class RenameMediaResult {
+    object Success : RenameMediaResult()
+    data class RequiresIntentSender(val intentSender: IntentSender) : RenameMediaResult()
+    data class RequiresPermission(val permission: String) : RenameMediaResult()
+    data class Error(val message: String) : RenameMediaResult()
 }
+typealias RenameVideoResult = RenameMediaResult
 
 sealed class DeleteTrackResult {
     object Success : DeleteTrackResult()
@@ -58,7 +62,7 @@ class MediaRepository(private val context: Context) {
     suspend fun getAudioTracks(): List<AudioTrack> = withContext(Dispatchers.IO) {
         val tracks = mutableListOf<AudioTrack>()
         val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-        val projection = arrayOf(
+        val projectionList = mutableListOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
             MediaStore.Audio.Media.ARTIST,
@@ -66,8 +70,16 @@ class MediaRepository(private val context: Context) {
             MediaStore.Audio.Media.ALBUM_ID,
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.DATA,
-            MediaStore.Audio.Media.MIME_TYPE
+            MediaStore.Audio.Media.MIME_TYPE,
+            MediaStore.Audio.Media.SIZE,
+            MediaStore.Audio.Media.DISPLAY_NAME,
+            MediaStore.Audio.Media.DATE_ADDED,
+            MediaStore.Audio.Media.DATE_MODIFIED
         )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            projectionList.add(MediaStore.Audio.Media.RELATIVE_PATH)
+        }
+        val projection = projectionList.toTypedArray()
         // Filter out very short ringtones or notification sounds (< 5 seconds)
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.DURATION} >= 5000"
         val sortOrder = "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
@@ -82,6 +94,13 @@ class MediaRepository(private val context: Context) {
                 val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
                 val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
                 val mimeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
+                val sizeCol = cursor.getColumnIndex(MediaStore.Audio.Media.SIZE)
+                val dispCol = cursor.getColumnIndex(MediaStore.Audio.Media.DISPLAY_NAME)
+                val addedCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATE_ADDED)
+                val modCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATE_MODIFIED)
+                val relCol = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    cursor.getColumnIndex(MediaStore.Audio.Media.RELATIVE_PATH)
+                } else -1
 
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idCol)
@@ -92,6 +111,11 @@ class MediaRepository(private val context: Context) {
                     val duration = cursor.getLong(durationCol)
                     val path = cursor.getString(dataCol) ?: ""
                     val mime = cursor.getString(mimeCol)
+                    val size = if (sizeCol >= 0 && !cursor.isNull(sizeCol)) cursor.getLong(sizeCol) else 0L
+                    val displayName = if (dispCol >= 0 && !cursor.isNull(dispCol)) cursor.getString(dispCol) ?: "" else ""
+                    val dateAdded = if (addedCol >= 0 && !cursor.isNull(addedCol)) cursor.getLong(addedCol) else 0L
+                    val dateModified = if (modCol >= 0 && !cursor.isNull(modCol)) cursor.getLong(modCol) else 0L
+                    val relativePath = if (relCol >= 0 && !cursor.isNull(relCol)) cursor.getString(relCol) ?: "" else ""
 
                     val fileName = if (path.isNotEmpty()) File(path).nameWithoutExtension else "Track $id"
                     val title = if (!rawTitle.isNullOrBlank() && rawTitle != "<unknown>") rawTitle else fileName
@@ -115,7 +139,12 @@ class MediaRepository(private val context: Context) {
                             path = path,
                             folderName = folderName,
                             mimeType = mime,
-                            albumArtUri = albumArtUri
+                            albumArtUri = albumArtUri,
+                            size = size,
+                            displayName = displayName,
+                            dateAdded = dateAdded,
+                            dateModified = dateModified,
+                            relativePath = relativePath
                         )
                     )
                 }
@@ -245,7 +274,8 @@ class MediaRepository(private val context: Context) {
                 path = if (uri.scheme == "file") (uri.path ?: "") else "",
                 folderName = context.getString(R.string.subtitle_external_file),
                 mimeType = mime,
-                albumArtUri = if (hasArt) uri.toString() else null
+                albumArtUri = if (hasArt) uri.toString() else null,
+                displayName = displayName ?: (uri.lastPathSegment?.substringAfterLast('/') ?: "")
             )
         } catch (e: Exception) {
             AudioTrack(
@@ -258,7 +288,8 @@ class MediaRepository(private val context: Context) {
                 path = if (uri.scheme == "file") (uri.path ?: "") else "",
                 folderName = context.getString(R.string.subtitle_external_file),
                 mimeType = null,
-                albumArtUri = null
+                albumArtUri = null,
+                displayName = displayName ?: (uri.lastPathSegment?.substringAfterLast('/') ?: "")
             )
         }
     }
@@ -576,31 +607,41 @@ class MediaRepository(private val context: Context) {
     suspend fun deleteVideoAfterSecurityApproval(video: VideoItem): Boolean =
         deleteMediaAfterSecurityApproval(Uri.parse(video.uri))
 
-    suspend fun checkVideoNameExists(video: VideoItem, newFullName: String): Boolean = withContext(Dispatchers.IO) {
-        if (video.path.isNotEmpty()) {
-            val file = File(video.path)
+    suspend fun checkMediaNameExists(
+        path: String,
+        relativePath: String,
+        newFullName: String,
+        isAudio: Boolean
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (path.isNotEmpty()) {
+            val file = File(path)
             val parent = file.parentFile
             if (parent != null && File(parent, newFullName).exists()) {
                 return@withContext true
             }
         }
-        val uri = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        val uri = if (isAudio) MediaStore.Audio.Media.EXTERNAL_CONTENT_URI else MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        val dispCol = if (isAudio) MediaStore.Audio.Media.DISPLAY_NAME else MediaStore.Video.Media.DISPLAY_NAME
+        val relCol = if (isAudio) MediaStore.Audio.Media.RELATIVE_PATH else MediaStore.Video.Media.RELATIVE_PATH
+        val dataCol = if (isAudio) MediaStore.Audio.Media.DATA else MediaStore.Video.Media.DATA
+        val idCol = if (isAudio) MediaStore.Audio.Media._ID else MediaStore.Video.Media._ID
+
         val selection: String
         val selectionArgs: Array<String>
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && video.relativePath.isNotEmpty()) {
-            selection = "${MediaStore.Video.Media.DISPLAY_NAME} = ? AND ${MediaStore.Video.Media.RELATIVE_PATH} = ?"
-            selectionArgs = arrayOf(newFullName, video.relativePath)
-        } else if (video.path.isNotEmpty()) {
-            val parent = File(video.path).parent ?: ""
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && relativePath.isNotEmpty()) {
+            selection = "$dispCol = ? AND $relCol = ?"
+            selectionArgs = arrayOf(newFullName, relativePath)
+        } else if (path.isNotEmpty()) {
+            val parent = File(path).parent ?: ""
             val targetPath = if (parent.isNotEmpty()) "$parent/$newFullName" else ""
-            selection = "${MediaStore.Video.Media.DISPLAY_NAME} = ? OR ${MediaStore.Video.Media.DATA} = ?"
+            selection = "$dispCol = ? OR $dataCol = ?"
             selectionArgs = arrayOf(newFullName, targetPath)
         } else {
-            selection = "${MediaStore.Video.Media.DISPLAY_NAME} = ?"
+            selection = "$dispCol = ?"
             selectionArgs = arrayOf(newFullName)
         }
         try {
-            contentResolver.query(uri, arrayOf(MediaStore.Video.Media._ID), selection, selectionArgs, null)?.use { cursor ->
+            contentResolver.query(uri, arrayOf(idCol), selection, selectionArgs, null)?.use { cursor ->
                 cursor.moveToFirst()
             } ?: false
         } catch (_: Exception) {
@@ -608,28 +649,34 @@ class MediaRepository(private val context: Context) {
         }
     }
 
-    suspend fun renameVideo(video: VideoItem, newFullName: String): RenameVideoResult = withContext(Dispatchers.IO) {
-        val uri = try {
-            Uri.parse(video.uri)
-        } catch (e: Exception) {
-            return@withContext RenameVideoResult.Error(context.getString(R.string.delete_error_invalid_uri))
-        }
+    suspend fun checkVideoNameExists(video: VideoItem, newFullName: String): Boolean =
+        checkMediaNameExists(video.path, video.relativePath, newFullName, isAudio = false)
 
+    suspend fun checkTrackNameExists(track: AudioTrack, newFullName: String): Boolean =
+        checkMediaNameExists(track.path, track.relativePath, newFullName, isAudio = true)
+
+    suspend fun renameMediaUri(
+        uri: Uri,
+        path: String,
+        relativePath: String,
+        newFullName: String,
+        isAudio: Boolean
+    ): RenameMediaResult = withContext(Dispatchers.IO) {
         // Check if name already exists
-        if (checkVideoNameExists(video, newFullName)) {
-            return@withContext RenameVideoResult.Error(context.getString(R.string.rename_error_already_exists))
+        if (checkMediaNameExists(path, relativePath, newFullName, isAudio)) {
+            return@withContext RenameMediaResult.Error(context.getString(R.string.rename_error_already_exists))
         }
 
         // 1. SAF Documents Provider URI
         if (DocumentsContract.isDocumentUri(context, uri)) {
             return@withContext try {
                 val newUri = DocumentsContract.renameDocument(contentResolver, uri, newFullName)
-                if (newUri != null) RenameVideoResult.Success
-                else RenameVideoResult.Error(context.getString(R.string.rename_error_doc_failed))
+                if (newUri != null) RenameMediaResult.Success
+                else RenameMediaResult.Error(context.getString(R.string.rename_error_doc_failed))
             } catch (se: SecurityException) {
-                RenameVideoResult.Error(context.getString(R.string.delete_error_readonly_permission))
+                RenameMediaResult.Error(context.getString(R.string.delete_error_readonly_permission))
             } catch (e: Exception) {
-                RenameVideoResult.Error(e.localizedMessage ?: context.getString(R.string.rename_failed))
+                RenameMediaResult.Error(e.localizedMessage ?: context.getString(R.string.rename_failed))
             }
         }
 
@@ -637,11 +684,11 @@ class MediaRepository(private val context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             return@withContext try {
                 val pendingIntent = MediaStore.createWriteRequest(contentResolver, listOf(uri))
-                RenameVideoResult.RequiresIntentSender(pendingIntent.intentSender, video, newFullName)
+                RenameMediaResult.RequiresIntentSender(pendingIntent.intentSender)
             } catch (e: Exception) {
-                val updated = performRenameUpdate(video, newFullName)
-                if (updated) RenameVideoResult.Success
-                else RenameVideoResult.Error(e.localizedMessage ?: context.getString(R.string.rename_failed))
+                val updated = performMediaRenameUpdate(uri, newFullName, isAudio)
+                if (updated) RenameMediaResult.Success
+                else RenameMediaResult.Error(e.localizedMessage ?: context.getString(R.string.rename_failed))
             }
         }
 
@@ -649,20 +696,23 @@ class MediaRepository(private val context: Context) {
         if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
             return@withContext try {
                 val values = ContentValues().apply {
-                    put(MediaStore.Video.Media.DISPLAY_NAME, newFullName)
-                    put(MediaStore.Video.Media.TITLE, newFullName.substringBeforeLast('.'))
+                    val dispCol = if (isAudio) MediaStore.Audio.Media.DISPLAY_NAME else MediaStore.Video.Media.DISPLAY_NAME
+                    put(dispCol, newFullName)
+                    if (!isAudio) {
+                        put(MediaStore.Video.Media.TITLE, newFullName.substringBeforeLast('.'))
+                    }
                 }
                 val count = contentResolver.update(uri, values, null, null)
-                if (count > 0) RenameVideoResult.Success
-                else RenameVideoResult.Error(context.getString(R.string.rename_failed))
+                if (count > 0) RenameMediaResult.Success
+                else RenameMediaResult.Error(context.getString(R.string.rename_failed))
             } catch (securityEx: SecurityException) {
                 if (securityEx is android.app.RecoverableSecurityException) {
-                    RenameVideoResult.RequiresIntentSender(securityEx.userAction.actionIntent.intentSender, video, newFullName)
+                    RenameMediaResult.RequiresIntentSender(securityEx.userAction.actionIntent.intentSender)
                 } else {
-                    RenameVideoResult.Error(securityEx.localizedMessage ?: context.getString(R.string.delete_error_permission_denied))
+                    RenameMediaResult.Error(securityEx.localizedMessage ?: context.getString(R.string.delete_error_permission_denied))
                 }
             } catch (e: Exception) {
-                RenameVideoResult.Error(e.localizedMessage ?: context.getString(R.string.rename_failed))
+                RenameMediaResult.Error(e.localizedMessage ?: context.getString(R.string.rename_failed))
             }
         }
 
@@ -673,17 +723,15 @@ class MediaRepository(private val context: Context) {
         ) == PackageManager.PERMISSION_GRANTED
 
         if (!hasWritePermission) {
-            return@withContext RenameVideoResult.RequiresPermission(
-                Manifest.permission.WRITE_EXTERNAL_STORAGE,
-                video,
-                newFullName
+            return@withContext RenameMediaResult.RequiresPermission(
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
             )
         }
 
         return@withContext try {
             var updated = false
-            if (video.path.isNotEmpty()) {
-                val oldFile = File(video.path)
+            if (path.isNotEmpty()) {
+                val oldFile = File(path)
                 if (oldFile.exists()) {
                     val newFile = File(oldFile.parentFile, newFullName)
                     if (oldFile.renameTo(newFile)) {
@@ -698,29 +746,184 @@ class MediaRepository(private val context: Context) {
                 }
             }
             val values = ContentValues().apply {
-                put(MediaStore.Video.Media.DISPLAY_NAME, newFullName)
-                put(MediaStore.Video.Media.TITLE, newFullName.substringBeforeLast('.'))
+                val dispCol = if (isAudio) MediaStore.Audio.Media.DISPLAY_NAME else MediaStore.Video.Media.DISPLAY_NAME
+                put(dispCol, newFullName)
+                if (!isAudio) {
+                    put(MediaStore.Video.Media.TITLE, newFullName.substringBeforeLast('.'))
+                }
             }
             val count = contentResolver.update(uri, values, null, null)
-            if (count > 0 || updated) RenameVideoResult.Success
-            else RenameVideoResult.Error(context.getString(R.string.rename_failed))
+            if (count > 0 || updated) RenameMediaResult.Success
+            else RenameMediaResult.Error(context.getString(R.string.rename_failed))
         } catch (e: Exception) {
-            RenameVideoResult.Error(e.localizedMessage ?: context.getString(R.string.rename_failed))
+            RenameMediaResult.Error(e.localizedMessage ?: context.getString(R.string.rename_failed))
         }
     }
 
-    suspend fun performRenameUpdate(video: VideoItem, newFullName: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun performMediaRenameUpdate(uri: Uri, newFullName: String, isAudio: Boolean): Boolean = withContext(Dispatchers.IO) {
         try {
-            val uri = Uri.parse(video.uri)
             val values = ContentValues().apply {
-                put(MediaStore.Video.Media.DISPLAY_NAME, newFullName)
-                put(MediaStore.Video.Media.TITLE, newFullName.substringBeforeLast('.'))
+                val dispCol = if (isAudio) MediaStore.Audio.Media.DISPLAY_NAME else MediaStore.Video.Media.DISPLAY_NAME
+                put(dispCol, newFullName)
+                if (!isAudio) {
+                    put(MediaStore.Video.Media.TITLE, newFullName.substringBeforeLast('.'))
+                }
             }
             val count = contentResolver.update(uri, values, null, null)
             count > 0
         } catch (e: Exception) {
             false
         }
+    }
+
+    suspend fun renameVideo(video: VideoItem, newFullName: String): RenameMediaResult = withContext(Dispatchers.IO) {
+        val uri = try {
+            Uri.parse(video.uri)
+        } catch (e: Exception) {
+            return@withContext RenameMediaResult.Error(context.getString(R.string.delete_error_invalid_uri))
+        }
+        renameMediaUri(uri, video.path, video.relativePath, newFullName, isAudio = false)
+    }
+
+    suspend fun renameTrack(track: AudioTrack, newFullName: String): RenameMediaResult = withContext(Dispatchers.IO) {
+        val uri = try {
+            Uri.parse(track.uri)
+        } catch (e: Exception) {
+            return@withContext RenameMediaResult.Error(context.getString(R.string.delete_error_invalid_uri))
+        }
+        renameMediaUri(uri, track.path, track.relativePath, newFullName, isAudio = true)
+    }
+
+    suspend fun performRenameUpdate(video: VideoItem, newFullName: String): Boolean =
+        performMediaRenameUpdate(Uri.parse(video.uri), newFullName, isAudio = false)
+
+    suspend fun performTrackRenameUpdate(track: AudioTrack, newFullName: String): Boolean =
+        performMediaRenameUpdate(Uri.parse(track.uri), newFullName, isAudio = true)
+
+    suspend fun loadSongExtraInfo(track: AudioTrack): SongExtraInfo = withContext(Dispatchers.IO) {
+        var codecStr = "Unknown"
+        var bitrateStr = "Unknown"
+        var sampleRateStr = "Unknown"
+        var bitDepthStr = "Unknown"
+        var channelsStr = "Unknown"
+
+        var retriever: MediaMetadataRetriever? = null
+        var extractor: MediaExtractor? = null
+
+        val uri = try { Uri.parse(track.uri) } catch (_: Exception) { null }
+
+        try {
+            if (uri != null) {
+                try {
+                    retriever = MediaMetadataRetriever().apply {
+                        setDataSource(context, uri)
+                    }
+                } catch (_: Exception) {
+                    if (track.path.isNotEmpty() && File(track.path).exists()) {
+                        retriever = MediaMetadataRetriever().apply {
+                            setDataSource(track.path)
+                        }
+                    }
+                }
+            }
+
+            retriever?.let { r ->
+                val br = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)?.toLongOrNull()
+                if (br != null && br > 0) {
+                    bitrateStr = if (br >= 1_000_000) {
+                        String.format(Locale.ROOT, "%.2f Mbps", br / 1_000_000.0)
+                    } else {
+                        String.format(Locale.ROOT, "%d kbps", br / 1000)
+                    }
+                }
+            }
+
+            if (uri != null) {
+                try {
+                    extractor = MediaExtractor().apply {
+                        setDataSource(context, uri, null)
+                    }
+                } catch (_: Exception) {
+                    if (track.path.isNotEmpty() && File(track.path).exists()) {
+                        extractor = MediaExtractor().apply {
+                            setDataSource(track.path)
+                        }
+                    }
+                }
+            }
+
+            extractor?.let { ext ->
+                for (i in 0 until ext.trackCount) {
+                    val format = ext.getTrackFormat(i)
+                    val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
+                    if (mime.startsWith("audio/")) {
+                        codecStr = resolveCodecFriendlyName(mime)
+
+                        if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
+                            val sr = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                            if (sr > 0) {
+                                val khz = sr / 1000.0
+                                sampleRateStr = if (khz % 1.0 == 0.0) "${khz.toInt()} kHz" else String.format(Locale.ROOT, "%.1f kHz", khz)
+                            }
+                        }
+
+                        if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
+                            val ch = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                            channelsStr = when (ch) {
+                                1 -> "1 (Mono)"
+                                2 -> "2 (Stereo)"
+                                else -> "$ch Channels"
+                            }
+                        }
+
+                        if (bitrateStr == "Unknown" && format.containsKey(MediaFormat.KEY_BIT_RATE)) {
+                            val br = format.getInteger(MediaFormat.KEY_BIT_RATE).toLong()
+                            if (br > 0) {
+                                bitrateStr = if (br >= 1_000_000) {
+                                    String.format(Locale.ROOT, "%.2f Mbps", br / 1_000_000.0)
+                                } else {
+                                    String.format(Locale.ROOT, "%d kbps", br / 1000)
+                                }
+                            }
+                        }
+
+                        val formatDetected = AudioFormatDetector.detectFromMime(mime)
+                        if (formatDetected.bitDepth > 0) {
+                            bitDepthStr = "${formatDetected.bitDepth}-bit"
+                        } else if (format.containsKey("pcm-encoding")) {
+                            val enc = format.getInteger("pcm-encoding")
+                            bitDepthStr = when (enc) {
+                                C.ENCODING_PCM_16BIT -> "16-bit"
+                                C.ENCODING_PCM_24BIT -> "24-bit"
+                                C.ENCODING_PCM_32BIT -> "32-bit"
+                                else -> "Unknown"
+                            }
+                        }
+                        break
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            // Keep "Unknown" fallbacks
+        } finally {
+            try { retriever?.release() } catch (_: Exception) {}
+            try { extractor?.release() } catch (_: Exception) {}
+        }
+
+        if (codecStr == "Unknown") {
+            val detected = AudioFormatDetector.detectFromMime(track.mimeType)
+            if (detected.codec != "UNKNOWN" && detected.codec.isNotBlank()) {
+                codecStr = detected.codec
+            }
+        }
+
+        SongExtraInfo(
+            codec = codecStr,
+            bitrate = bitrateStr,
+            sampleRate = sampleRateStr,
+            bitDepth = bitDepthStr,
+            channels = channelsStr
+        )
     }
 
     suspend fun loadVideoExtraInfo(video: VideoItem): VideoExtraInfo = withContext(Dispatchers.IO) {
