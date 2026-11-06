@@ -26,12 +26,9 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 sealed class VideoActionEvent {
-    data class LaunchIntentSender(val intentSender: IntentSender, val action: ActionType) : VideoActionEvent() {
-        enum class ActionType { DELETE, RENAME }
-    }
-    data class RequestStoragePermission(val permission: String, val action: ActionType) : VideoActionEvent() {
-        enum class ActionType { DELETE, RENAME }
-    }
+    enum class ActionType { DELETE, RENAME }
+    data class LaunchIntentSender(val intentSender: IntentSender, val action: ActionType) : VideoActionEvent()
+    data class RequestStoragePermission(val permission: String, val action: ActionType) : VideoActionEvent()
     data class ShowMessage(val message: String) : VideoActionEvent()
 }
 
