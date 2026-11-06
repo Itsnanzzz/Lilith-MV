@@ -488,258 +488,298 @@ fun VideoCardItem(
 ) {
     val colors = AppThemeTokens.colors
     val itemShape = RoundedCornerShape(AppTokens.Radius12)
-    var menuExpanded by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(itemShape)
             .background(colors.surface)
-            .clickable(onClick = onClick)
             .padding(vertical = 4.dp, horizontal = 4.dp)
             .testTag("video_item_${video.id}"),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Video Thumbnail on the LEFT (16:9 aspect ratio, 12dp rounded corners)
-        Box(
-            modifier = Modifier
-                .width(124.dp)
-                .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(AppTokens.Radius12))
-                .background(colors.surfaceMuted),
-            contentAlignment = Alignment.Center
-        ) {
-            // Background placeholder icon
-            Icon(
-                imageVector = Icons.Default.Videocam,
-                contentDescription = null,
-                tint = colors.textSecondary.copy(alpha = 0.4f),
-                modifier = Modifier.size(28.dp)
-            )
-
-            val context = LocalContext.current
-            val targetUri = video.thumbnailUri?.takeIf { it.isNotBlank() } ?: video.uri
-            if (targetUri.isNotBlank()) {
-                val imageRequest = remember(targetUri) {
-                    ImageRequest.Builder(context)
-                        .data(Uri.parse(targetUri))
-                        .decoderFactory(VideoFrameDecoder.Factory())
-                        .crossfade(true)
-                        .build()
-                }
-                AsyncImage(
-                    model = imageRequest,
-                    contentDescription = video.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-
-            // Play icon overlay
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.55f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.PlayArrow,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-
-            // Duration badge at bottom right (dark pill with white 10sp text)
-            if (video.durationMs > 0) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(5.dp)
-                        .clip(RoundedCornerShape(AppTokens.RadiusPill))
-                        .background(Color.Black.copy(alpha = 0.68f))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = TimeUtils.formatDuration(video.durationMs),
-                        color = Color.White,
-                        style = AppTypography.caption.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.width(12.dp))
-
-        // Video Title & Metadata in the MIDDLE
-        Column(
+        // Left & middle content: clickable to open/play video
+        Row(
             modifier = Modifier
                 .weight(1f)
-                .padding(vertical = 4.dp)
+                .clip(itemShape)
+                .clickable(onClick = onClick),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = video.title,
-                style = AppTypography.listTitle,
-                color = colors.textPrimary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+            // Video Thumbnail on the LEFT (16:9 aspect ratio, 12dp rounded corners)
+            Box(
+                modifier = Modifier
+                    .width(124.dp)
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(AppTokens.Radius12))
+                    .background(colors.surfaceMuted),
+                contentAlignment = Alignment.Center
+            ) {
+                // Background placeholder icon
+                Icon(
+                    imageVector = Icons.Default.Videocam,
+                    contentDescription = null,
+                    tint = colors.textSecondary.copy(alpha = 0.4f),
+                    modifier = Modifier.size(28.dp)
+                )
 
-            Spacer(modifier = Modifier.height(4.dp))
+                val context = LocalContext.current
+                val targetUri = video.thumbnailUri?.takeIf { it.isNotBlank() } ?: video.uri
+                if (targetUri.isNotBlank()) {
+                    val imageRequest = remember(targetUri) {
+                        ImageRequest.Builder(context)
+                            .data(Uri.parse(targetUri))
+                            .decoderFactory(VideoFrameDecoder.Factory())
+                            .crossfade(true)
+                            .build()
+                    }
+                    AsyncImage(
+                        model = imageRequest,
+                        contentDescription = video.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Play icon overlay
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.55f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+
+                // Duration badge at bottom right (dark pill with white 10sp text)
+                if (video.durationMs > 0) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(5.dp)
+                            .clip(RoundedCornerShape(AppTokens.RadiusPill))
+                            .background(Color.Black.copy(alpha = 0.68f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = TimeUtils.formatDuration(video.durationMs),
+                            color = Color.White,
+                            style = AppTypography.caption.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // Video Title & Metadata in the MIDDLE
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(vertical = 4.dp)
+            ) {
                 Text(
-                    text = video.folderName,
-                    style = AppTypography.listSubtitle,
-                    color = colors.textSecondary,
-                    maxLines = 1,
+                    text = video.title,
+                    style = AppTypography.listTitle,
+                    color = colors.textPrimary,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (video.height > 0) {
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = " • ${video.height}p",
-                        style = AppTypography.listSubtitle.copy(fontWeight = FontWeight.Medium),
-                        color = colors.primary,
-                        maxLines = 1
+                        text = video.folderName,
+                        style = AppTypography.listSubtitle,
+                        color = colors.textSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
+                    if (video.height > 0) {
+                        Text(
+                            text = " • ${video.height}p",
+                            style = AppTypography.listSubtitle.copy(fontWeight = FontWeight.Medium),
+                            color = colors.primary,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
         }
 
-        // Three-Dot Action Menu Button on the RIGHT
-        Box(contentAlignment = Alignment.Center) {
-            AppIconButton(
-                onClick = { menuExpanded = true },
-                icon = Icons.Default.MoreVert,
-                contentDescription = stringResource(R.string.more_options),
-                iconSize = 20.dp,
-                tintOverride = colors.textSecondary,
-                testTag = "video_more_button_${video.id}"
+        Spacer(modifier = Modifier.width(4.dp))
+
+        // Three-Dot Action Menu Button on the RIGHT (isolated from play click)
+        VideoRowTrailingMenu(
+            video = video,
+            isOperating = isOperating,
+            onInfoClick = onInfoClick,
+            onShareClick = onShareClick,
+            onRenameClick = onRenameClick,
+            onDeleteClick = onDeleteClick
+        )
+    }
+}
+
+/**
+ * Trailing Three-Dot Action Menu for video rows:
+ * - Flat 48dp icon button with 20dp icon, textSecondary tint
+ * - Anchored dropdown menu with Info, Share, Rename, divider, and Delete
+ */
+@Composable
+fun VideoRowTrailingMenu(
+    video: VideoItem,
+    isOperating: Boolean,
+    onInfoClick: () -> Unit,
+    onShareClick: () -> Unit,
+    onRenameClick: () -> Unit,
+    onDeleteClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = AppThemeTokens.colors
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        AppIconButton(
+            onClick = { menuExpanded = true },
+            icon = Icons.Default.MoreVert,
+            contentDescription = stringResource(R.string.more_options),
+            iconSize = 20.dp,
+            tintOverride = colors.textSecondary,
+            testTag = "video_more_button_${video.id}"
+        )
+
+        DropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false },
+            modifier = Modifier
+                .widthIn(min = 180.dp, max = 220.dp)
+                .shadow(elevation = 8.dp, shape = RoundedCornerShape(AppTokens.Radius16))
+                .background(colors.surface, shape = RoundedCornerShape(AppTokens.Radius16))
+        ) {
+            // 1. Info
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = stringResource(R.string.action_info),
+                        color = colors.textPrimary,
+                        style = AppTypography.body
+                    )
+                },
+                onClick = {
+                    menuExpanded = false
+                    onInfoClick()
+                },
+                enabled = !isOperating,
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = stringResource(R.string.action_info),
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                },
+                modifier = Modifier.testTag("video_menu_info_${video.id}")
             )
 
-            DropdownMenu(
-                expanded = menuExpanded,
-                onDismissRequest = { menuExpanded = false },
-                modifier = Modifier
-                    .widthIn(min = 180.dp, max = 220.dp)
-                    .shadow(elevation = 8.dp, shape = RoundedCornerShape(AppTokens.Radius16))
-                    .background(colors.surface, shape = RoundedCornerShape(AppTokens.Radius16))
-            ) {
-                // 1. Info
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = stringResource(R.string.action_info),
-                            color = colors.textPrimary,
-                            style = AppTypography.body
+            // 2. Share
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = stringResource(R.string.action_share),
+                        color = colors.textPrimary,
+                        style = AppTypography.body
+                    )
+                },
+                onClick = {
+                    menuExpanded = false
+                    onShareClick()
+                },
+                enabled = !isOperating,
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = stringResource(R.string.action_share),
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                },
+                modifier = Modifier.testTag("video_menu_share_${video.id}")
+            )
+
+            // 3. Rename
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = stringResource(R.string.action_rename),
+                        color = colors.textPrimary,
+                        style = AppTypography.body
+                    )
+                },
+                onClick = {
+                    menuExpanded = false
+                    onRenameClick()
+                },
+                enabled = !isOperating,
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = stringResource(R.string.action_rename),
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                },
+                modifier = Modifier.testTag("video_menu_rename_${video.id}")
+            )
+
+            // Hairline divider
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 4.dp),
+                color = colors.hairline
+            )
+
+            // 4. Delete
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = stringResource(R.string.delete),
+                        color = colors.destructive,
+                        style = AppTypography.body.copy(fontWeight = FontWeight.Medium)
+                    )
+                },
+                onClick = {
+                    menuExpanded = false
+                    onDeleteClick()
+                },
+                enabled = !isOperating,
+                leadingIcon = {
+                    if (isOperating) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = colors.destructive
                         )
-                    },
-                    onClick = {
-                        menuExpanded = false
-                        onInfoClick()
-                    },
-                    enabled = !isOperating,
-                    leadingIcon = {
+                    } else {
                         Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = stringResource(R.string.action_info),
-                            tint = colors.textPrimary,
+                            imageVector = Icons.Default.DeleteForever,
+                            contentDescription = stringResource(R.string.delete),
+                            tint = colors.destructive,
                             modifier = Modifier.size(20.dp)
                         )
-                    },
-                    modifier = Modifier.testTag("video_menu_info_${video.id}")
-                )
-
-                // 2. Share
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = stringResource(R.string.action_share),
-                            color = colors.textPrimary,
-                            style = AppTypography.body
-                        )
-                    },
-                    onClick = {
-                        menuExpanded = false
-                        onShareClick()
-                    },
-                    enabled = !isOperating,
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Share,
-                            contentDescription = stringResource(R.string.action_share),
-                            tint = colors.textPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    },
-                    modifier = Modifier.testTag("video_menu_share_${video.id}")
-                )
-
-                // 3. Rename
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = stringResource(R.string.action_rename),
-                            color = colors.textPrimary,
-                            style = AppTypography.body
-                        )
-                    },
-                    onClick = {
-                        menuExpanded = false
-                        onRenameClick()
-                    },
-                    enabled = !isOperating,
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = stringResource(R.string.action_rename),
-                            tint = colors.textPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    },
-                    modifier = Modifier.testTag("video_menu_rename_${video.id}")
-                )
-
-                // Hairline divider
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 4.dp),
-                    color = colors.hairline
-                )
-
-                // 4. Delete
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = stringResource(R.string.delete),
-                            color = colors.destructive,
-                            style = AppTypography.body.copy(fontWeight = FontWeight.Medium)
-                        )
-                    },
-                    onClick = {
-                        menuExpanded = false
-                        onDeleteClick()
-                    },
-                    enabled = !isOperating,
-                    leadingIcon = {
-                        if (isOperating) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = colors.destructive
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.DeleteForever,
-                                contentDescription = stringResource(R.string.delete),
-                                tint = colors.destructive,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    },
-                    modifier = Modifier.testTag("video_menu_delete_${video.id}")
-                )
-            }
+                    }
+                },
+                modifier = Modifier.testTag("video_menu_delete_${video.id}")
+            )
         }
     }
 }
