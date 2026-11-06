@@ -198,6 +198,7 @@
     <string name="accent_red">Red</string>
     <string name="accent_orange">Orange</string>
     <string name="accent_purple">Purple</string>
+    <string name="accent_cyan">Cyan</string>
     <string name="settings_about">About</string>
     <string name="settings_version">Lilith MV v1.0.0</string>
     <string name="settings_app_desc">A lightweight native media player with lossless audio and multi-format subtitle support.</string>

@@ -124,6 +124,7 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.example.R
 import com.example.ui.theme.AppFontFamily
+import com.example.ui.theme.AppThemeTokens
 import com.example.ui.theme.AppTypography
 import com.example.data.model.AspectRatioMode
 import com.example.data.model.VideoItem
@@ -133,7 +134,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
-private val ActiveAccentColor = Color.White
 private val TextWhitePrimary = Color.White
 private val TextWhiteSecondary = Color.White.copy(alpha = 0.70f)
 private val ScrimColor = Color.Black.copy(alpha = 0.35f)
@@ -146,6 +146,7 @@ fun VideoPlayerScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colors = AppThemeTokens.colors
     val context = LocalContext.current
     val activity = context as? Activity
     val configuration = LocalConfiguration.current
@@ -348,7 +349,7 @@ fun VideoPlayerScreen(
                     Icon(
                         imageVector = Icons.Outlined.Headphones,
                         contentDescription = stringResource(R.string.audio_only),
-                        tint = ActiveAccentColor,
+                        tint = colors.accent,
                         modifier = Modifier.size(64.dp)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -594,12 +595,12 @@ fun VideoPlayerScreen(
                     Spacer(modifier = Modifier.width(12.dp))
                     Button(
                         onClick = { viewModel.resumeFromSavedPosition() },
-                        colors = ButtonDefaults.buttonColors(containerColor = ActiveAccentColor),
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
                         shape = RoundedCornerShape(10.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                         modifier = Modifier.testTag("resume_button")
                     ) {
-                        Text(stringResource(R.string.video_resume_action), fontSize = 12.sp, color = Color.Black)
+                        Text(stringResource(R.string.video_resume_action), fontSize = 12.sp, color = colors.onAccent)
                     }
                     Spacer(modifier = Modifier.width(4.dp))
                     TextButton(
@@ -756,7 +757,7 @@ fun VideoPlayerScreen(
                                             )
                                             Text(
                                                 text = if (uiState.isLooping) stringResource(R.string.loop_on) else stringResource(R.string.loop_off),
-                                                color = if (uiState.isLooping) ActiveAccentColor else TextWhiteSecondary,
+                                                color = if (uiState.isLooping) colors.accent else TextWhiteSecondary,
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.SemiBold
                                             )
@@ -1101,6 +1102,7 @@ private fun MinimalIconButton(
     iconSize: Dp = 24.dp,
     testTag: String? = null
 ) {
+    val accentColor = AppThemeTokens.colors.accent
     Box(
         modifier = modifier
             .size(48.dp) // Minimum 48dp touch target
@@ -1120,7 +1122,7 @@ private fun MinimalIconButton(
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                tint = if (isActive) ActiveAccentColor else Color.White,
+                tint = if (isActive) accentColor else Color.White,
                 modifier = Modifier
                     .size(iconSize)
                     .then(iconModifier)
@@ -1131,7 +1133,7 @@ private fun MinimalIconButton(
                     modifier = Modifier
                         .size(3.dp)
                         .clip(CircleShape)
-                        .background(ActiveAccentColor)
+                        .background(accentColor)
                 )
             }
         }
@@ -1149,6 +1151,7 @@ private fun SpeedBadgeButton(
     modifier: Modifier = Modifier,
     testTag: String? = null
 ) {
+    val accentColor = AppThemeTokens.colors.accent
     val speedText = if (speed % 1.0f == 0f) "${speed.toInt()}X" else "${speed}X"
     val isCustom = speed != 1.0f
 
@@ -1168,7 +1171,7 @@ private fun SpeedBadgeButton(
             modifier = Modifier
                 .border(
                     width = 1.dp,
-                    color = if (isCustom) ActiveAccentColor else Color.White.copy(alpha = 0.85f),
+                    color = if (isCustom) accentColor else Color.White.copy(alpha = 0.85f),
                     shape = RoundedCornerShape(4.dp)
                 )
                 .padding(horizontal = 4.dp, vertical = 2.dp),
@@ -1176,7 +1179,7 @@ private fun SpeedBadgeButton(
         ) {
             Text(
                 text = speedText,
-                color = if (isCustom) ActiveAccentColor else Color.White,
+                color = if (isCustom) accentColor else Color.White,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -1263,23 +1266,25 @@ private fun VideoMinimalSeekBar(
                 .background(Color.White.copy(alpha = 0.30f))
         )
 
-        // 4dp Progress Track: Solid White
+        val accentColor = AppThemeTokens.colors.accent
+
+        // 4dp Progress Track: Accent Color
         Box(
             modifier = Modifier
                 .fillMaxWidth(activeFraction)
                 .height(4.dp)
                 .clip(RoundedCornerShape(2.dp))
-                .background(Color.White)
+                .background(accentColor)
         )
 
-        // 12dp White Thumb (Visible ONLY while dragging)
+        // 12dp Accent Thumb (Visible ONLY while dragging)
         if (thumbSize > 0.dp) {
             Box(
                 modifier = Modifier
                     .offset(x = (thumbOffset - (thumbSize / 2)).coerceIn(0.dp, totalWidth - thumbSize))
                     .size(thumbSize)
                     .clip(CircleShape)
-                    .background(Color.White)
+                    .background(accentColor)
             )
         }
 
@@ -1406,6 +1411,7 @@ private fun VerticalGestureIndicator(
     percentageText: String,
     modifier: Modifier = Modifier
 ) {
+    val accentColor = AppThemeTokens.colors.accent
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -1417,7 +1423,7 @@ private fun VerticalGestureIndicator(
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = Color.White,
+            tint = accentColor,
             modifier = Modifier.size(22.dp)
         )
         Spacer(modifier = Modifier.height(10.dp))
@@ -1435,7 +1441,7 @@ private fun VerticalGestureIndicator(
                     .fillMaxWidth()
                     .fillMaxHeight(fraction.coerceIn(0f, 1f))
                     .clip(RoundedCornerShape(3.dp))
-                    .background(Color.White)
+                    .background(accentColor)
             )
         }
         Spacer(modifier = Modifier.height(10.dp))

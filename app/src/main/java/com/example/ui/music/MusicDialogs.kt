@@ -98,7 +98,7 @@ fun EqualizerDialog(
                 Icon(
                     imageVector = Icons.Default.Equalizer,
                     contentDescription = null,
-                    tint = colors.primary,
+                    tint = colors.accentText,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.width(10.dp))
@@ -173,7 +173,7 @@ fun EqualizerDialog(
                                 Text(
                                     text = "${(localBass / 10).toInt()}%",
                                     style = AppTypography.label,
-                                    color = colors.primary
+                                    color = colors.accentText
                                 )
                             }
                             Spacer(modifier = Modifier.height(4.dp))
@@ -218,7 +218,7 @@ fun SleepTimerDialog(
                 Icon(
                     imageVector = Icons.Default.AvTimer,
                     contentDescription = null,
-                    tint = colors.primary,
+                    tint = colors.accentText,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.width(10.dp))
@@ -235,7 +235,7 @@ fun SleepTimerDialog(
                     Text(
                         text = stringResource(R.string.sleep_timer_active, remainingMinutes),
                         style = AppTypography.body.copy(fontWeight = FontWeight.Medium),
-                        color = colors.primary
+                        color = colors.accentText
                     )
                     Spacer(modifier = Modifier.height(14.dp))
                 }
@@ -303,7 +303,7 @@ fun PlaybackSpeedDialog(
                 Icon(
                     imageVector = Icons.Default.Speed,
                     contentDescription = null,
-                    tint = colors.primary,
+                    tint = colors.accentText,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.width(10.dp))
@@ -336,14 +336,14 @@ fun PlaybackSpeedDialog(
                     ) {
                         Text(
                             text = "${speed}x",
-                            color = colors.textPrimary,
+                            color = if (isSelected) colors.accentText else colors.textPrimary,
                             style = AppTypography.body.copy(fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal)
                         )
                         if (isSelected) {
                             Icon(
                                 imageVector = Icons.Default.Check,
                                 contentDescription = null,
-                                tint = colors.primary,
+                                tint = colors.accentText,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -402,7 +402,7 @@ fun CreatePlaylistDialog(
                         onValueChange = { playlistName = it },
                         singleLine = true,
                         textStyle = AppTypography.body.copy(color = colors.textPrimary),
-                        cursorBrush = SolidColor(colors.primary),
+                        cursorBrush = SolidColor(colors.foregroundAccent),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("playlist_name_input")
@@ -479,7 +479,7 @@ fun AddToPlaylistDialog(
                                 Icon(
                                     imageVector = Icons.Default.PlaylistPlay,
                                     contentDescription = null,
-                                    tint = colors.primary,
+                                    tint = colors.accentText,
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
@@ -696,7 +696,7 @@ fun SongInfoDialog(
                         Text(
                             text = displayPath,
                             style = AppTypography.body.copy(fontSize = 13.sp),
-                            color = colors.primary
+                            color = colors.accentText
                         )
                     }
 

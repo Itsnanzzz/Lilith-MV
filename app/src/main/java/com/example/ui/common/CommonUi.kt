@@ -174,7 +174,7 @@ fun MediaRenameDialog(
                                 .testTag(textFieldTestTag),
                             textStyle = AppTypography.body.copy(color = colors.textPrimary, fontSize = 15.sp),
                             singleLine = true,
-                            cursorBrush = SolidColor(colors.primary)
+                            cursorBrush = SolidColor(colors.foregroundAccent)
                         )
 
                         if (extension.isNotEmpty()) {
@@ -249,7 +249,17 @@ fun MediaFormatBadge(
             .clip(RoundedCornerShape(AppTokens.RadiusPill))
             .then(
                 if (isLossless) {
-                    Modifier.background(colors.primary)
+                    Modifier
+                        .background(colors.accent)
+                        .then(
+                            if (colors.isLightWhiteAccent) {
+                                Modifier.border(
+                                    width = 1.dp,
+                                    color = colors.hairline,
+                                    shape = RoundedCornerShape(AppTokens.RadiusPill)
+                                )
+                            } else Modifier
+                        )
                 } else {
                     Modifier.border(
                         width = 1.dp,
@@ -264,7 +274,7 @@ fun MediaFormatBadge(
     ) {
         Text(
             text = label,
-            color = if (isLossless) colors.onPrimary else colors.textSecondary,
+            color = if (isLossless) colors.onAccent else colors.textSecondary,
             style = AppTypography.badge
         )
     }

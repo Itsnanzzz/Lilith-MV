@@ -37,11 +37,20 @@ data class AppColors(
     val onAccent: Color,
     val accentText: Color,
     val miniPlayerProgress: Color,
-    val isDark: Boolean
-)
+    val isDark: Boolean,
+    val isLightWhiteAccent: Boolean = false
+) {
+    /**
+     * Foreground accent for thin strokes/indicators on app background:
+     * preserves exact accent in Dark mode and for all chromatic colors,
+     * while falling back to dark ink when White (#ffffff) is paired with Light mode.
+     */
+    val foregroundAccent: Color
+        get() = if (isLightWhiteAccent) accentText else accent
+}
 
 object AppTokens {
-    // 1. Light Palette (From Reference: Minimal, Airy, Monochrome)
+    // 1. Light Palette (Minimal, Airy, Monochrome base)
     val LightBackground = Color(0xFFFFFFFF)
     val LightSurface = Color(0xFFFFFFFF)
     val LightSurfaceMuted = Color(0xFFF3F4F7)
@@ -57,7 +66,7 @@ object AppTokens {
     val LightDestructive = Color(0xFFD64545)
     val LightAccent = LightPrimary
 
-    // 2. Dark Palette (Derived with Same Clean Aesthetic)
+    // 2. Dark Palette
     val DarkBackground = Color(0xFF0E1117)
     val DarkSurface = Color(0xFF0E1117)
     val DarkSurfaceMuted = Color(0xFF1A1F2B)
@@ -75,111 +84,54 @@ object AppTokens {
 
     fun resolveAccentColors(accent: AppAccent, isDark: Boolean): AccentColorSet {
         return when (accent) {
-            AppAccent.WHITE -> if (isDark) {
-                AccentColorSet(
-                    accent = Color(0xFFF2F4F8),
-                    onAccent = Color(0xFF171C26),
-                    accentText = Color(0xFFF2F4F8),
-                    miniPlayerProgress = Color(0xFFFFFFFF)
-                )
-            } else {
-                AccentColorSet(
-                    accent = Color(0xFF171C26),
-                    onAccent = Color(0xFFFFFFFF),
-                    accentText = Color(0xFF171C26),
-                    miniPlayerProgress = Color(0xFFFFFFFF)
-                )
-            }
-            AppAccent.BLUE -> if (isDark) {
-                AccentColorSet(
-                    accent = Color(0xFF60A5FA),
-                    onAccent = Color(0xFF0E1117),
-                    accentText = Color(0xFF60A5FA),
-                    miniPlayerProgress = Color(0xFF60A5FA)
-                )
-            } else {
-                AccentColorSet(
-                    accent = Color(0xFF2563EB),
-                    onAccent = Color(0xFFFFFFFF),
-                    accentText = Color(0xFF2563EB),
-                    miniPlayerProgress = Color(0xFF60A5FA)
-                )
-            }
-            AppAccent.GREEN -> if (isDark) {
-                AccentColorSet(
-                    accent = Color(0xFF4ADE80),
-                    onAccent = Color(0xFF0E1117),
-                    accentText = Color(0xFF4ADE80),
-                    miniPlayerProgress = Color(0xFF4ADE80)
-                )
-            } else {
-                AccentColorSet(
-                    accent = Color(0xFF15803D),
-                    onAccent = Color(0xFFFFFFFF),
-                    accentText = Color(0xFF15803D),
-                    miniPlayerProgress = Color(0xFF4ADE80)
-                )
-            }
-            AppAccent.YELLOW -> if (isDark) {
-                AccentColorSet(
-                    accent = Color(0xFFFACC15),
-                    onAccent = Color(0xFF0E1117),
-                    accentText = Color(0xFFFACC15),
-                    miniPlayerProgress = Color(0xFFFACC15)
-                )
-            } else {
-                AccentColorSet(
-                    accent = Color(0xFFFACC15),
-                    onAccent = Color(0xFF171C26),
-                    accentText = Color(0xFFA16207),
-                    miniPlayerProgress = Color(0xFFFACC15)
-                )
-            }
-            AppAccent.RED -> if (isDark) {
-                AccentColorSet(
-                    accent = Color(0xFFF87171),
-                    onAccent = Color(0xFF0E1117),
-                    accentText = Color(0xFFF87171),
-                    miniPlayerProgress = Color(0xFFF87171)
-                )
-            } else {
-                AccentColorSet(
-                    accent = Color(0xFFDC2626),
-                    onAccent = Color(0xFFFFFFFF),
-                    accentText = Color(0xFFDC2626),
-                    miniPlayerProgress = Color(0xFFF87171)
-                )
-            }
-            AppAccent.ORANGE -> if (isDark) {
-                AccentColorSet(
-                    accent = Color(0xFFFB923C),
-                    onAccent = Color(0xFF0E1117),
-                    accentText = Color(0xFFFB923C),
-                    miniPlayerProgress = Color(0xFFFB923C)
-                )
-            } else {
-                AccentColorSet(
-                    accent = Color(0xFFC2410C),
-                    onAccent = Color(0xFFFFFFFF),
-                    accentText = Color(0xFFC2410C),
-                    miniPlayerProgress = Color(0xFFFB923C)
-                )
-            }
-            AppAccent.PURPLE -> if (isDark) {
-                AccentColorSet(
-                    accent = Color(0xFFA78BFA),
-                    onAccent = Color(0xFF0E1117),
-                    accentText = Color(0xFFA78BFA),
-                    miniPlayerProgress = Color(0xFFA78BFA)
-                )
-            } else {
-                AccentColorSet(
-                    accent = Color(0xFF7C3AED),
-                    onAccent = Color(0xFFFFFFFF),
-                    accentText = Color(0xFF7C3AED),
-                    miniPlayerProgress = Color(0xFFA78BFA)
-                )
-            }
+            AppAccent.WHITE -> AccentColorSet(
+                accent = AccentWhite,
+                onAccent = Color(0xFF171C26),
+                accentText = if (isDark) AccentWhite else Color(0xFF171C26),
+                miniPlayerProgress = AccentWhite
+            )
+            AppAccent.YELLOW -> AccentColorSet(
+                accent = AccentYellow,
+                onAccent = Color(0xFF171C26),
+                accentText = if (isDark) AccentYellow else Color(0xFF997B00),
+                miniPlayerProgress = AccentYellow
+            )
+            AppAccent.BLUE -> AccentColorSet(
+                accent = AccentBlue,
+                onAccent = Color(0xFFFFFFFF),
+                accentText = if (isDark) Color(0xFF6B78FF) else AccentBlue,
+                miniPlayerProgress = AccentBlue
+            )
+            AppAccent.GREEN -> AccentColorSet(
+                accent = AccentGreen,
+                onAccent = Color(0xFF0E1117),
+                accentText = if (isDark) AccentGreen else Color(0xFF12873B),
+                miniPlayerProgress = AccentGreen
+            )
+            AppAccent.RED -> AccentColorSet(
+                accent = AccentRed,
+                onAccent = Color(0xFFFFFFFF),
+                accentText = if (isDark) Color(0xFFFF5A54) else AccentRed,
+                miniPlayerProgress = AccentRed
+            )
+            AppAccent.ORANGE -> AccentColorSet(
+                accent = AccentOrange,
+                onAccent = Color(0xFF0E1117),
+                accentText = if (isDark) AccentOrange else Color(0xFFB55600),
+                miniPlayerProgress = AccentOrange
+            )
+            AppAccent.PURPLE -> AccentColorSet(
+                accent = AccentPurple,
+                onAccent = Color(0xFFFFFFFF),
+                accentText = if (isDark) Color(0xFFC965F2) else AccentPurple,
+                miniPlayerProgress = AccentPurple
+            )
+            AppAccent.CYAN -> AccentColorSet(
+                accent = AccentCyan,
+                onAccent = Color(0xFF171C26),
+                accentText = if (isDark) AccentCyan else Color(0xFF007E82),
+                miniPlayerProgress = AccentCyan
+            )
         }
     }
 
@@ -188,6 +140,7 @@ object AppTokens {
 
     fun createColors(isDark: Boolean, accent: AppAccent): AppColors {
         val accentSet = resolveAccentColors(accent, isDark)
+        val isLightWhite = !isDark && accent == AppAccent.WHITE
         return if (isDark) {
             AppColors(
                 background = DarkBackground,
@@ -197,8 +150,8 @@ object AppTokens {
                 textPrimary = DarkTextPrimary,
                 textSecondary = DarkTextSecondary,
                 disabled = DarkDisabled,
-                primary = DarkPrimary,
-                onPrimary = DarkOnPrimary,
+                primary = accentSet.accent,
+                onPrimary = accentSet.onAccent,
                 miniPlayerSurface = DarkMiniPlayerSurface,
                 miniPlayerTextPrimary = DarkMiniPlayerTextPrimary,
                 miniPlayerTextSecondary = DarkMiniPlayerTextSecondary,
@@ -207,7 +160,8 @@ object AppTokens {
                 onAccent = accentSet.onAccent,
                 accentText = accentSet.accentText,
                 miniPlayerProgress = accentSet.miniPlayerProgress,
-                isDark = true
+                isDark = true,
+                isLightWhiteAccent = false
             )
         } else {
             AppColors(
@@ -218,8 +172,8 @@ object AppTokens {
                 textPrimary = LightTextPrimary,
                 textSecondary = LightTextSecondary,
                 disabled = LightDisabled,
-                primary = LightPrimary,
-                onPrimary = LightOnPrimary,
+                primary = accentSet.accent,
+                onPrimary = accentSet.onAccent,
                 miniPlayerSurface = LightMiniPlayerSurface,
                 miniPlayerTextPrimary = LightMiniPlayerTextPrimary,
                 miniPlayerTextSecondary = LightMiniPlayerTextSecondary,
@@ -228,7 +182,8 @@ object AppTokens {
                 onAccent = accentSet.onAccent,
                 accentText = accentSet.accentText,
                 miniPlayerProgress = accentSet.miniPlayerProgress,
-                isDark = false
+                isDark = false,
+                isLightWhiteAccent = isLightWhite
             )
         }
     }

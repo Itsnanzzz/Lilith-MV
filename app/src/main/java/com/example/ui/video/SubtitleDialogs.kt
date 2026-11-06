@@ -91,7 +91,7 @@ fun SubtitleTrackDialog(
                     Icon(
                         imageVector = Icons.Default.Subtitles,
                         contentDescription = null,
-                        tint = colors.primary,
+                        tint = colors.accentText,
                         modifier = Modifier.size(22.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
@@ -154,13 +154,13 @@ fun SubtitleTrackDialog(
                                 style = AppTypography.body.copy(
                                     fontWeight = if (isOffSelected) FontWeight.Bold else FontWeight.Normal
                                 ),
-                                color = colors.textPrimary
+                                color = if (isOffSelected) colors.accentText else colors.textPrimary
                             )
                             if (isOffSelected) {
                                 Icon(
                                     imageVector = Icons.Default.Check,
                                     contentDescription = null,
-                                    tint = colors.primary,
+                                    tint = colors.accentText,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -190,7 +190,7 @@ fun SubtitleTrackDialog(
                                     style = AppTypography.body.copy(
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                                     ),
-                                    color = colors.textPrimary
+                                    color = if (isSelected) colors.accentText else colors.textPrimary
                                 )
                                 if (track.isExternal) {
                                     Text(
@@ -204,7 +204,7 @@ fun SubtitleTrackDialog(
                                 Icon(
                                     imageVector = Icons.Default.Check,
                                     contentDescription = null,
-                                    tint = colors.primary,
+                                    tint = colors.accentText,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -272,7 +272,7 @@ fun SubtitleSettingsDialog(
                 Icon(
                     imageVector = Icons.Default.Settings,
                     contentDescription = null,
-                    tint = colors.primary,
+                    tint = colors.accentText,
                     modifier = Modifier.size(22.dp)
                 )
                 Spacer(modifier = Modifier.width(10.dp))
@@ -333,7 +333,7 @@ fun SubtitleSettingsDialog(
                     Text(
                         text = "${fontSize.toInt()} sp",
                         style = AppTypography.label,
-                        color = colors.primary
+                        color = colors.accentText
                     )
                 }
                 AppSlider(
@@ -397,7 +397,7 @@ fun SubtitleSettingsDialog(
                     Text(
                         text = "${(bgAlpha * 100).toInt()}%",
                         style = AppTypography.label,
-                        color = colors.primary
+                        color = colors.accentText
                     )
                 }
                 AppSlider(
@@ -423,7 +423,7 @@ fun SubtitleSettingsDialog(
                     Text(
                         text = stringResource(R.string.subtitle_delay_seconds, delaySec),
                         style = AppTypography.label,
-                        color = colors.primary
+                        color = colors.accentText
                     )
                 }
                 Row(
@@ -452,7 +452,7 @@ fun SubtitleSettingsDialog(
                             .padding(vertical = 8.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(stringResource(R.string.reset), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                        Text(stringResource(R.string.reset), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.accentText)
                     }
                     Box(
                         modifier = Modifier
@@ -515,7 +515,7 @@ fun AudioTrackDialog(
                 Icon(
                     imageVector = Icons.Default.Audiotrack,
                     contentDescription = null,
-                    tint = colors.primary,
+                    tint = colors.accentText,
                     modifier = Modifier.size(22.dp)
                 )
                 Spacer(modifier = Modifier.width(10.dp))
@@ -559,13 +559,13 @@ fun AudioTrackDialog(
                                     style = AppTypography.body.copy(
                                         fontWeight = if (choice.isSelected) FontWeight.Bold else FontWeight.Normal
                                     ),
-                                    color = colors.textPrimary
+                                    color = if (choice.isSelected) colors.accentText else colors.textPrimary
                                 )
                                 if (choice.isSelected) {
                                     Icon(
                                         imageVector = Icons.Default.Check,
                                         contentDescription = null,
-                                        tint = colors.primary,
+                                        tint = colors.accentText,
                                         modifier = Modifier.size(18.dp)
                                     )
                                 }

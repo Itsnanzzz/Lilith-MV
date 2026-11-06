@@ -8,6 +8,7 @@ import androidx.compose.foundation.MarqueeAnimationMode
 import androidx.compose.foundation.MarqueeSpacing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -346,7 +347,8 @@ fun NowPlayingSheet(
                     label = "${playbackSpeed}x",
                     contentDescription = stringResource(R.string.playback_speed),
                     onClick = onOpenSpeedDialog,
-                    colors = colors
+                    colors = colors,
+                    isActive = playbackSpeed != 1.0f
                 )
 
                 Spacer(modifier = Modifier.width(10.dp))
@@ -406,6 +408,11 @@ private fun MainPlayPauseCircleButton(
             .scale(scale)
             .clip(CircleShape)
             .background(colors.accent)
+            .then(
+                if (colors.isLightWhiteAccent) {
+                    Modifier.border(1.dp, colors.hairline, CircleShape)
+                } else Modifier
+            )
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -476,7 +483,7 @@ private fun NowPlayingToggleButton(
                     Icon(
                         imageVector = icon,
                         contentDescription = contentDescription,
-                        tint = colors.textPrimary,
+                        tint = colors.accentText,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -485,7 +492,7 @@ private fun NowPlayingToggleButton(
                     modifier = Modifier
                         .size(4.dp)
                         .clip(CircleShape)
-                        .background(colors.primary)
+                        .background(colors.foregroundAccent)
                 )
             }
         } else {
@@ -522,7 +529,7 @@ private fun SecondaryUtilityPill(
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = if (isActive) colors.primary else colors.textSecondary,
+            tint = if (isActive) colors.accentText else colors.textSecondary,
             modifier = Modifier.size(16.dp)
         )
         Spacer(modifier = Modifier.width(6.dp))
@@ -530,7 +537,7 @@ private fun SecondaryUtilityPill(
             text = label,
             fontSize = 12.sp,
             fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Medium,
-            color = if (isActive) colors.textPrimary else colors.textSecondary
+            color = if (isActive) colors.accentText else colors.textSecondary
         )
     }
 }

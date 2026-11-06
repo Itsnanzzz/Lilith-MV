@@ -200,7 +200,7 @@ fun MiniPlayer(
                     modifier = Modifier
                         .fillMaxWidth(progress)
                         .fillMaxHeight()
-                        .background(colors.miniPlayerTextPrimary)
+                        .background(colors.miniPlayerProgress)
                 )
             }
         }

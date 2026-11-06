@@ -198,9 +198,10 @@ fun NeumorphicIconButton(
         label = "btn_scale"
     )
 
+    val appColors = AppThemeTokens.colors
     val iconTint = when {
         !enabled -> colors.textSecondary.copy(alpha = 0.4f)
-        isActive -> colors.accent
+        isActive -> appColors.accentText
         else -> colors.textPrimary
     }
 
@@ -284,7 +285,8 @@ fun NeumorphicSlider(
     testTag: String? = null
 ) {
     val colors = NeumorphicTheme.colors
-    val accent = accentColorOverride ?: colors.accent
+    val appColors = AppThemeTokens.colors
+    val accent = accentColorOverride ?: appColors.foregroundAccent
     val rangeSpan = (valueRange.endInclusive - valueRange.start).coerceAtLeast(0.0001f)
     val normalizedVal = ((value - valueRange.start) / rangeSpan).coerceIn(0f, 1f)
 
@@ -391,14 +393,20 @@ fun NeumorphicChip(
     label: @Composable () -> Unit
 ) {
     val colors = NeumorphicTheme.colors
+    val appColors = AppThemeTokens.colors
     val containerColor = if (selected) colors.accent else (if (colors.isDark) Color(0xFF1A1F2B) else Color(0xFFF3F4F7))
-    val contentColor = if (selected) Color.White else colors.textSecondary
+    val contentColor = if (selected) appColors.onAccent else colors.textSecondary
 
     Box(
         modifier = modifier
             .height(32.dp)
             .clip(RoundedCornerShape(999.dp))
             .background(containerColor)
+            .then(
+                if (selected && appColors.isLightWhiteAccent) {
+                    Modifier.border(1.dp, appColors.hairline, RoundedCornerShape(999.dp))
+                } else Modifier
+            )
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -468,7 +476,7 @@ fun NeumorphicTextField(
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Normal
                     ),
-                    cursorBrush = SolidColor(colors.accent),
+                    cursorBrush = SolidColor(AppThemeTokens.colors.foregroundAccent),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -564,7 +572,7 @@ fun NeumorphicFloatingBottomBar(
                     Icon(
                         imageVector = iconVector,
                         contentDescription = label,
-                        tint = if (isSelected) colors.textPrimary else colors.textSecondary,
+                        tint = if (isSelected) AppThemeTokens.colors.accentText else colors.textSecondary,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -629,7 +637,7 @@ fun RowScope.NeumorphicBottomBarItem(
         contentAlignment = Alignment.Center
     ) {
         CompositionLocalProvider(
-            LocalContentColor provides if (selected) colors.textPrimary else colors.textSecondary
+            LocalContentColor provides if (selected) AppThemeTokens.colors.accentText else colors.textSecondary
         ) {
             icon(selected)
         }

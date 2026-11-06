@@ -17,6 +17,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -413,7 +414,7 @@ fun MusicScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = colors.primary)
+                        CircularProgressIndicator(color = colors.accentText)
                     }
                 } else {
                     val isDetailShowing = when (pagerState.currentPage) {
@@ -614,9 +615,9 @@ fun MusicScreen(
                 Snackbar(
                     snackbarData = data,
                     shape = RoundedCornerShape(AppTokens.Radius12),
-                    containerColor = colors.primary,
-                    contentColor = colors.onPrimary,
-                    actionColor = colors.onPrimary
+                    containerColor = colors.accent,
+                    contentColor = colors.onAccent,
+                    actionColor = colors.onAccent
                 )
             }
         )
@@ -1130,21 +1131,21 @@ fun AnimatedEqualizerBars(
                     .weight(1f)
                     .fillMaxHeight(height1)
                     .clip(RoundedCornerShape(1.dp))
-                    .background(colors.accentText)
+                    .background(colors.accent)
             )
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(height2)
                     .clip(RoundedCornerShape(1.dp))
-                    .background(colors.accentText)
+                    .background(colors.accent)
             )
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(height3)
                     .clip(RoundedCornerShape(1.dp))
-                    .background(colors.accentText)
+                    .background(colors.accent)
             )
         }
     }
@@ -1402,7 +1403,7 @@ fun FoldersListView(
                         Icon(
                             imageVector = Icons.Default.Folder,
                             contentDescription = null,
-                            tint = colors.textPrimary,
+                            tint = colors.accentText,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -1479,7 +1480,7 @@ fun PlaylistsView(
                             Icon(
                                 imageVector = Icons.Default.PlaylistPlay,
                                 contentDescription = null,
-                                tint = colors.textPrimary,
+                                tint = colors.accentText,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
@@ -1518,7 +1519,12 @@ fun PlaylistsView(
                 modifier = Modifier
                     .size(56.dp)
                     .clip(CircleShape)
-                    .background(colors.primary)
+                    .background(colors.accent)
+                    .then(
+                        if (colors.isLightWhiteAccent) {
+                            Modifier.border(1.dp, colors.hairline, CircleShape)
+                        } else Modifier
+                    )
                     .clickable(onClick = onCreatePlaylist)
                     .testTag("create_playlist_fab"),
                 contentAlignment = Alignment.Center
@@ -1526,7 +1532,7 @@ fun PlaylistsView(
                 Icon(
                     imageVector = Icons.Default.Add,
                     contentDescription = stringResource(R.string.playlist_create),
-                    tint = colors.onPrimary,
+                    tint = colors.onAccent,
                     modifier = Modifier.size(26.dp)
                 )
             }

@@ -115,7 +115,7 @@ fun SettingsScreen(
                     Icon(
                         imageVector = Icons.Default.DarkMode,
                         contentDescription = null,
-                        tint = colors.primary,
+                        tint = colors.accentText,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
@@ -167,7 +167,7 @@ fun SettingsScreen(
                     Icon(
                         imageVector = Icons.Default.Palette,
                         contentDescription = null,
-                        tint = colors.primary,
+                        tint = colors.accentText,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
@@ -180,62 +180,73 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                val accents = AppAccent.values()
+                val accentRows = AppAccent.entries.chunked(4)
 
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .selectableGroup(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    accents.forEach { accent ->
-                        val isSelected = appAccent == accent
-                        val accentColors = AppTokens.resolveAccentColors(accent, colors.isDark)
-                        val swatchColor = accentColors.accent
-                        val onAccentColor = accentColors.onAccent
-                        val isWhiteSwatch = accent == AppAccent.WHITE
-
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .clickable(
-                                    role = Role.RadioButton,
-                                    onClick = { viewModel.setAccentColor(accent) }
-                                )
-                                .semantics { this.selected = isSelected }
-                                .then(
-                                    if (isSelected) {
-                                        Modifier.border(
-                                            width = 2.5.dp,
-                                            color = if (isWhiteSwatch && !colors.isDark) colors.textPrimary else swatchColor,
-                                            shape = CircleShape
-                                        )
-                                    } else Modifier
-                                )
-                                .testTag("accent_swatch_${accent.name.lowercase()}"),
-                            contentAlignment = Alignment.Center
+                    accentRows.forEach { rowAccents ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .clip(CircleShape)
-                                    .background(swatchColor)
-                                    .then(
-                                        if (isWhiteSwatch) {
-                                            Modifier.border(1.dp, colors.hairline, CircleShape)
-                                        } else Modifier
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (isSelected) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = null,
-                                        tint = onAccentColor,
-                                        modifier = Modifier.size(18.dp)
-                                    )
+                            rowAccents.forEach { accent ->
+                                val isSelected = appAccent == accent
+                                val accentColors = AppTokens.resolveAccentColors(accent, colors.isDark)
+                                val swatchColor = accentColors.accent
+                                val onAccentColor = accentColors.onAccent
+                                val isWhiteSwatch = accent == AppAccent.WHITE
+
+                                Box(
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .clip(CircleShape)
+                                        .clickable(
+                                            role = Role.RadioButton,
+                                            onClick = { viewModel.setAccentColor(accent) }
+                                        )
+                                        .semantics { this.selected = isSelected }
+                                        .then(
+                                            if (isSelected) {
+                                                Modifier.border(
+                                                    width = 2.5.dp,
+                                                    color = if (isWhiteSwatch && !colors.isDark) colors.textPrimary else swatchColor,
+                                                    shape = CircleShape
+                                                )
+                                            } else Modifier
+                                        )
+                                        .testTag("accent_swatch_${accent.name.lowercase()}"),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(swatchColor)
+                                            .then(
+                                                if (isWhiteSwatch) {
+                                                    Modifier.border(
+                                                        width = 1.dp,
+                                                        color = if (!colors.isDark) colors.disabled else colors.hairline,
+                                                        shape = CircleShape
+                                                    )
+                                                } else Modifier
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (isSelected) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = onAccentColor,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -252,6 +263,7 @@ fun SettingsScreen(
                     AppAccent.RED -> stringResource(R.string.accent_red)
                     AppAccent.ORANGE -> stringResource(R.string.accent_orange)
                     AppAccent.PURPLE -> stringResource(R.string.accent_purple)
+                    AppAccent.CYAN -> stringResource(R.string.accent_cyan)
                 }
 
                 Text(
@@ -289,7 +301,7 @@ fun SettingsScreen(
                         Icon(
                             imageVector = Icons.Default.GraphicEq,
                             contentDescription = null,
-                            tint = colors.primary,
+                            tint = colors.accentText,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
@@ -333,7 +345,7 @@ fun SettingsScreen(
                         Icon(
                             imageVector = Icons.Default.Headphones,
                             contentDescription = null,
-                            tint = colors.primary,
+                            tint = colors.accentText,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
@@ -375,7 +387,7 @@ fun SettingsScreen(
                     Icon(
                         imageVector = Icons.Default.Subtitles,
                         contentDescription = null,
-                        tint = colors.primary,
+                        tint = colors.accentText,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
@@ -459,7 +471,7 @@ fun SettingsScreen(
                     Icon(
                         imageVector = Icons.Default.Info,
                         contentDescription = null,
-                        tint = colors.primary,
+                        tint = colors.accentText,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))

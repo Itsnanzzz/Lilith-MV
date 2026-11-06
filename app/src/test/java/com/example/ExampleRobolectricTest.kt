@@ -19,6 +19,11 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.Color
+import com.example.data.AppAccent
 import com.example.data.MediaRepository
 import com.example.data.RenameMediaResult
 import com.example.data.db.PlaylistEntity
@@ -32,6 +37,18 @@ import com.example.ui.common.TimeUtils
 import com.example.ui.music.CollectionDetailView
 import com.example.ui.music.MusicViewModel
 import com.example.ui.music.SongInfoDialog
+import com.example.ui.settings.SettingsScreen
+import com.example.ui.settings.SettingsViewModel
+import com.example.ui.theme.AccentBlue
+import com.example.ui.theme.AccentCyan
+import com.example.ui.theme.AccentGreen
+import com.example.ui.theme.AccentOrange
+import com.example.ui.theme.AccentPurple
+import com.example.ui.theme.AccentRed
+import com.example.ui.theme.AccentWhite
+import com.example.ui.theme.AccentYellow
+import com.example.ui.theme.AppThemeTokens
+import com.example.ui.theme.AppTokens
 import com.example.ui.theme.LilithTheme
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -489,6 +506,153 @@ class ExampleRobolectricTest {
             assertFalse(file1.exists())
         } finally {
             tempDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `accent color palette matches exact user hex codes and syncs tokens`() {
+        val expectedHexByAccent = mapOf(
+            AppAccent.YELLOW to Color(0xFFFCCF03),
+            AppAccent.BLUE to Color(0xFF030FFC),
+            AppAccent.GREEN to Color(0xFF1DB954),
+            AppAccent.RED to Color(0xFFDB0E07),
+            AppAccent.ORANGE to Color(0xFFDB6D07),
+            AppAccent.PURPLE to Color(0xFF990DD1),
+            AppAccent.CYAN to Color(0xFF0DCBD1),
+            AppAccent.WHITE to Color(0xFFFFFFFF)
+        )
+
+        assertEquals(8, AppAccent.entries.size)
+        assertEquals(AccentYellow, expectedHexByAccent[AppAccent.YELLOW])
+        assertEquals(AccentBlue, expectedHexByAccent[AppAccent.BLUE])
+        assertEquals(AccentGreen, expectedHexByAccent[AppAccent.GREEN])
+        assertEquals(AccentRed, expectedHexByAccent[AppAccent.RED])
+        assertEquals(AccentOrange, expectedHexByAccent[AppAccent.ORANGE])
+        assertEquals(AccentPurple, expectedHexByAccent[AppAccent.PURPLE])
+        assertEquals(AccentCyan, expectedHexByAccent[AppAccent.CYAN])
+        assertEquals(AccentWhite, expectedHexByAccent[AppAccent.WHITE])
+
+        for (isDark in listOf(false, true)) {
+            for ((accent, expectedColor) in expectedHexByAccent) {
+                val resolved = AppTokens.resolveAccentColors(accent, isDark)
+                assertEquals(
+                    "Unexpected accent hex for $accent (isDark=$isDark)",
+                    expectedColor,
+                    resolved.accent
+                )
+                assertEquals(
+                    "Unexpected miniPlayerProgress hex for $accent (isDark=$isDark)",
+                    expectedColor,
+                    resolved.miniPlayerProgress
+                )
+
+                val appColors = AppTokens.createColors(isDark = isDark, accent = accent)
+                assertEquals(expectedColor, appColors.accent)
+                assertEquals(expectedColor, appColors.primary)
+                assertEquals(resolved.onAccent, appColors.onPrimary)
+                assertEquals(!isDark && accent == AppAccent.WHITE, appColors.isLightWhiteAccent)
+                if (appColors.isLightWhiteAccent) {
+                    assertEquals(appColors.accentText, appColors.foregroundAccent)
+                } else {
+                    assertEquals(expectedColor, appColors.foregroundAccent)
+                }
+            }
+        }
+    }
+
+    private fun waitForAccentState(settingsViewModel: SettingsViewModel, expected: AppAccent) {
+        val deadline = System.currentTimeMillis() + 3_000L
+        while (settingsViewModel.appAccent.value != expected && System.currentTimeMillis() < deadline) {
+            Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            Thread.sleep(20)
+        }
+        assertEquals(expected, settingsViewModel.appAccent.value)
+        composeTestRule.mainClock.advanceTimeBy(300L)
+        composeTestRule.waitForIdle()
+    }
+
+    @Test
+    fun `settings screen renders 8 accent swatches and propagates selected accent to theme`() {
+        val settingsViewModel = SettingsViewModel(app)
+        var observedAppAccent: Color? = null
+        var observedForegroundAccent: Color? = null
+        var observedMaterialPrimary: Color? = null
+
+        ActivityScenario.launch(ComponentActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.setContent {
+                    val selectedAccent by settingsViewModel.appAccent.collectAsState()
+                    LilithTheme(darkTheme = true, appAccent = selectedAccent) {
+                        observedAppAccent = AppThemeTokens.colors.accent
+                        observedForegroundAccent = AppThemeTokens.colors.foregroundAccent
+                        observedMaterialPrimary = MaterialTheme.colorScheme.primary
+                        SettingsScreen(viewModel = settingsViewModel)
+                    }
+                }
+            }
+            composeTestRule.waitForIdle()
+
+            // Verify all 8 swatches are rendered
+            val expectedSwatches = listOf(
+                AppAccent.WHITE to Color(0xFFFFFFFF),
+                AppAccent.BLUE to Color(0xFF030FFC),
+                AppAccent.GREEN to Color(0xFF1DB954),
+                AppAccent.YELLOW to Color(0xFFFCCF03),
+                AppAccent.RED to Color(0xFFDB0E07),
+                AppAccent.ORANGE to Color(0xFFDB6D07),
+                AppAccent.PURPLE to Color(0xFF990DD1),
+                AppAccent.CYAN to Color(0xFF0DCBD1)
+            )
+
+            expectedSwatches.forEach { (accent, _) ->
+                composeTestRule.onNodeWithTag("accent_swatch_${accent.name.lowercase()}")
+                    .performScrollTo()
+                    .assertIsDisplayed()
+            }
+
+            // Select Cyan (#0dcbd1) and verify label & theme tokens update
+            composeTestRule.onNodeWithTag("accent_swatch_cyan")
+                .performScrollTo()
+                .performClick()
+            waitForAccentState(settingsViewModel, AppAccent.CYAN)
+
+            composeTestRule.onNodeWithText("Cyan").performScrollTo().assertIsDisplayed()
+            assertEquals(Color(0xFF0DCBD1), observedAppAccent)
+            assertEquals(Color(0xFF0DCBD1), observedForegroundAccent)
+            assertEquals(Color(0xFF0DCBD1), observedMaterialPrimary)
+
+            // Select Yellow (#fccf03) and verify label & theme tokens update
+            composeTestRule.onNodeWithTag("accent_swatch_yellow")
+                .performScrollTo()
+                .performClick()
+            waitForAccentState(settingsViewModel, AppAccent.YELLOW)
+
+            composeTestRule.onNodeWithText("Yellow").performScrollTo().assertIsDisplayed()
+            assertEquals(Color(0xFFFCCF03), observedAppAccent)
+            assertEquals(Color(0xFFFCCF03), observedForegroundAccent)
+            assertEquals(Color(0xFFFCCF03), observedMaterialPrimary)
+
+            // Select Purple (#990dd1) and verify label & theme tokens update
+            composeTestRule.onNodeWithTag("accent_swatch_purple")
+                .performScrollTo()
+                .performClick()
+            waitForAccentState(settingsViewModel, AppAccent.PURPLE)
+
+            composeTestRule.onNodeWithText("Purple").performScrollTo().assertIsDisplayed()
+            assertEquals(Color(0xFF990DD1), observedAppAccent)
+            assertEquals(Color(0xFF990DD1), observedForegroundAccent)
+            assertEquals(Color(0xFF990DD1), observedMaterialPrimary)
+
+            // Restore White (#ffffff) default and verify
+            composeTestRule.onNodeWithTag("accent_swatch_white")
+                .performScrollTo()
+                .performClick()
+            waitForAccentState(settingsViewModel, AppAccent.WHITE)
+
+            composeTestRule.onNodeWithText("White").performScrollTo().assertIsDisplayed()
+            assertEquals(Color(0xFFFFFFFF), observedAppAccent)
+            assertEquals(Color(0xFFFFFFFF), observedForegroundAccent)
+            assertEquals(Color(0xFFFFFFFF), observedMaterialPrimary)
         }
     }
 }

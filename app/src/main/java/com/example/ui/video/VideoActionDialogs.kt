@@ -133,7 +133,7 @@ fun VideoInfoDialog(
                         Text(
                             text = displayPath,
                             style = AppTypography.body.copy(fontSize = 13.sp),
-                            color = colors.primary
+                            color = colors.accentText
                         )
                     }
 

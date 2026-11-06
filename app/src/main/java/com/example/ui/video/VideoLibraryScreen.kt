@@ -49,6 +49,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -334,7 +335,7 @@ fun VideoLibraryScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator(
-                            color = colors.primary,
+                            color = colors.accentText,
                             modifier = Modifier.size(36.dp)
                         )
                     }
@@ -434,6 +435,16 @@ fun VideoLibraryScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            snackbar = { data ->
+                Snackbar(
+                    snackbarData = data,
+                    shape = RoundedCornerShape(AppTokens.Radius12),
+                    containerColor = colors.accent,
+                    contentColor = colors.onAccent,
+                    actionColor = colors.onAccent
+                )
+            }
         )
     }
 
@@ -606,7 +617,7 @@ fun VideoCardItem(
                         Text(
                             text = " • ${video.height}p",
                             style = AppTypography.listSubtitle.copy(fontWeight = FontWeight.Medium),
-                            color = colors.primary,
+                            color = colors.accentText,
                             maxLines = 1
                         )
                     }

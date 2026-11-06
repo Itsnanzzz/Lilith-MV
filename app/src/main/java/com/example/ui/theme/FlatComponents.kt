@@ -4,6 +4,7 @@ import android.provider.Settings
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -167,7 +168,7 @@ fun AppIconButton(
                         modifier = Modifier
                             .size(4.dp)
                             .clip(CircleShape)
-                            .background(colors.accent)
+                            .background(colors.foregroundAccent)
                     )
                 }
             }
@@ -203,6 +204,7 @@ fun AppPrimaryButton(
         enabled = enabled,
         interactionSource = interactionSource,
         shape = RoundedCornerShape(AppTokens.RadiusPill),
+        border = if (colors.isLightWhiteAccent) BorderStroke(1.dp, colors.hairline) else null,
         colors = ButtonDefaults.buttonColors(
             containerColor = colors.accent,
             contentColor = colors.onAccent,
@@ -326,6 +328,11 @@ fun AppChip(
             .scale(scale)
             .clip(RoundedCornerShape(AppTokens.RadiusPill))
             .background(containerColor)
+            .then(
+                if (selected && colors.isLightWhiteAccent) {
+                    Modifier.border(1.dp, colors.hairline, RoundedCornerShape(AppTokens.RadiusPill))
+                } else Modifier
+            )
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -399,7 +406,7 @@ fun AppSearchField(
                     onValueChange = onQueryChange,
                     singleLine = true,
                     textStyle = AppTypography.body.copy(color = colors.textPrimary),
-                    cursorBrush = SolidColor(colors.accent),
+                    cursorBrush = SolidColor(colors.foregroundAccent),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { onSearch() }),
                     modifier = Modifier.fillMaxWidth()
@@ -508,7 +515,7 @@ fun AppSlider(
                 .fillMaxWidth(activeFraction)
                 .height(4.dp)
                 .clip(RoundedCornerShape(2.dp))
-                .background(colors.accent)
+                .background(colors.foregroundAccent)
         )
 
         // 12dp Thumb
@@ -517,7 +524,7 @@ fun AppSlider(
                 .offset(x = (thumbOffset - 6.dp).coerceIn(0.dp, totalWidth - 12.dp))
                 .size(12.dp)
                 .clip(CircleShape)
-                .background(colors.accent)
+                .background(colors.foregroundAccent)
         )
     }
 }
@@ -541,6 +548,7 @@ fun AppSwitch(
         colors = SwitchDefaults.colors(
             checkedThumbColor = colors.onAccent,
             checkedTrackColor = colors.accent,
+            checkedBorderColor = if (colors.isLightWhiteAccent) colors.hairline else Color.Transparent,
             uncheckedThumbColor = colors.textSecondary,
             uncheckedTrackColor = colors.hairline,
             uncheckedBorderColor = Color.Transparent
@@ -581,6 +589,11 @@ fun <T> AppSegmentedControl(
                     .height(34.dp)
                     .clip(RoundedCornerShape(AppTokens.RadiusPill))
                     .background(containerColor)
+                    .then(
+                        if (isSelected && colors.isLightWhiteAccent) {
+                            Modifier.border(1.dp, colors.hairline, RoundedCornerShape(AppTokens.RadiusPill))
+                        } else Modifier
+                    )
                     .clickable(role = Role.Tab) { onItemSelected(item) }
                     .semantics { this.selected = isSelected }
                     .then(if (itemTestTagProvider != null) Modifier.testTag(itemTestTagProvider(item)) else Modifier),
@@ -617,7 +630,17 @@ fun AppBadge(
             .clip(RoundedCornerShape(AppTokens.RadiusPill))
             .then(
                 if (isLossless) {
-                    Modifier.background(colors.accent)
+                    Modifier
+                        .background(colors.accent)
+                        .then(
+                            if (colors.isLightWhiteAccent) {
+                                Modifier.border(
+                                    width = 1.dp,
+                                    color = colors.hairline,
+                                    shape = RoundedCornerShape(AppTokens.RadiusPill)
+                                )
+                            } else Modifier
+                        )
                 } else {
                     Modifier.border(
                         width = 1.dp,

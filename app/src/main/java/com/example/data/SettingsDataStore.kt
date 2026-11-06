@@ -18,7 +18,7 @@ enum class ThemeMode {
 }
 
 enum class AppAccent {
-    WHITE, BLUE, GREEN, YELLOW, RED, ORANGE, PURPLE
+    WHITE, BLUE, GREEN, YELLOW, RED, ORANGE, PURPLE, CYAN
 }
 
 

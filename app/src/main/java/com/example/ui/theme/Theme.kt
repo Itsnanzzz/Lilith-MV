@@ -73,13 +73,29 @@ fun LilithTheme(
     val animatedMiniPlayerProgress by animateColorAsState(targetValue = baseAppColors.miniPlayerProgress, animationSpec = animSpec, label = "mini_progress_anim")
 
     val appColors = baseAppColors.copy(
+        primary = animatedAccent,
+        onPrimary = animatedOnAccent,
         accent = animatedAccent,
         onAccent = animatedOnAccent,
         accentText = animatedAccentText,
         miniPlayerProgress = animatedMiniPlayerProgress
     )
 
-    val colorScheme = if (darkTheme) FlatDarkColorScheme else FlatLightColorScheme
+    val colorScheme = if (darkTheme) {
+        FlatDarkColorScheme.copy(
+            primary = appColors.accent,
+            onPrimary = appColors.onAccent,
+            secondary = appColors.accent,
+            onSecondary = appColors.onAccent
+        )
+    } else {
+        FlatLightColorScheme.copy(
+            primary = appColors.accent,
+            onPrimary = appColors.onAccent,
+            secondary = appColors.accent,
+            onSecondary = appColors.onAccent
+        )
+    }
 
     // Backward compatibility mapping for Neumorphic bridge during migration
     val bridgedNeumorphicColors = NeumorphicColors(

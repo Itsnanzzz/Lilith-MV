@@ -59,7 +59,7 @@ fun PermissionView(
                 Icon(
                     imageVector = Icons.Default.FolderSpecial,
                     contentDescription = null,
-                    tint = colors.primary,
+                    tint = colors.accentText,
                     modifier = Modifier.size(44.dp)
                 )
             }

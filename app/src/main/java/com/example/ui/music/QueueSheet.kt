@@ -1,6 +1,7 @@
 package com.example.ui.music
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -101,7 +102,7 @@ fun QueueSheet(
                     Icon(
                         imageVector = Icons.Default.QueueMusic,
                         contentDescription = null,
-                        tint = colors.primary,
+                        tint = colors.accentText,
                         modifier = Modifier.size(22.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
@@ -165,14 +166,19 @@ fun QueueSheet(
                                 modifier = Modifier
                                     .size(26.dp)
                                     .clip(CircleShape)
-                                    .background(if (isCurrent) colors.primary else colors.surfaceMuted),
+                                    .background(if (isCurrent) colors.accent else colors.surfaceMuted)
+                                    .then(
+                                        if (isCurrent && colors.isLightWhiteAccent) {
+                                            Modifier.border(1.dp, colors.hairline, CircleShape)
+                                        } else Modifier
+                                    ),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = "${index + 1}",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isCurrent) colors.onPrimary else colors.textSecondary
+                                    color = if (isCurrent) colors.onAccent else colors.textSecondary
                                 )
                             }
 
@@ -186,7 +192,7 @@ fun QueueSheet(
                                         fontSize = 14.sp,
                                         fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold
                                     ),
-                                    color = colors.textPrimary,
+                                    color = if (isCurrent) colors.accentText else colors.textPrimary,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
