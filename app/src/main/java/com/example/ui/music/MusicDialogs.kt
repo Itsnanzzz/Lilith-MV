@@ -153,7 +153,7 @@ fun EqualizerDialog(
                             itemsIndexed(state.presets) { index, presetName ->
                                 AppChip(
                                     text = presetName,
-                                    selected = state.currentPreset == index,
+                                    selected = state.activePreset == presetName || (state.presets.indexOf(state.activePreset) == index),
                                     onClick = { onSelectPreset(index) }
                                 )
                             }

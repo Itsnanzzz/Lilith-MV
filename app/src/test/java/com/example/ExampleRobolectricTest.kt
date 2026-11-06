@@ -914,6 +914,54 @@ class ExampleRobolectricTest {
         owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
     }
 
+    @Test
+    fun `equalizer controller initializes with 10 bands and adjusts presets and effects`() {
+        val controller = com.example.playback.EqualizerController.getInstance(app)
+        val state = controller.state.value
+
+        assertTrue(state.isAvailable)
+        assertTrue(state.isEnabled)
+        assertEquals(10, state.bands.size)
+        assertEquals("Flat", state.activePreset)
+        assertTrue(state.bands.all { it.gainDb == 0f })
+
+        // Switch to Rock preset
+        controller.setPreset("Rock")
+        val rockState = controller.state.value
+        assertEquals("Rock", rockState.activePreset)
+        assertTrue(rockState.bands[0].gainDb > 0f) // 31Hz boosted
+        assertTrue(rockState.bands[9].gainDb > 0f) // 16kHz boosted
+
+        // Manual adjustment of slider switches to Custom
+        controller.setBandGain(0, 8.5f)
+        val customState = controller.state.value
+        assertEquals("Custom", customState.activePreset)
+        assertEquals(8.5f, customState.bands[0].gainDb, 0.01f)
+
+        // Reset bands restores Flat with 0 dB
+        controller.resetBands()
+        val resetState = controller.state.value
+        assertEquals("Flat", resetState.activePreset)
+        assertTrue(resetState.bands.all { it.gainDb == 0f })
+
+        // Bass boost and virtualizer adjustments
+        controller.setBassBoostEnabled(true)
+        controller.setBassBoostStrength(650)
+        assertTrue(controller.state.value.isBassBoostEnabled)
+        assertEquals(650, controller.state.value.bassBoostStrength)
+
+        controller.setVirtualizerEnabled(true)
+        controller.setVirtualizerStrength(400)
+        assertTrue(controller.state.value.isVirtualizerEnabled)
+        assertEquals(400, controller.state.value.virtualizerStrength)
+
+        // Preamp adjustments
+        controller.setPreampGain(3.5f)
+        assertEquals(3.5f, controller.state.value.preampGainDb, 0.01f)
+        controller.resetPreamp()
+        assertEquals(0f, controller.state.value.preampGainDb, 0.01f)
+    }
+
     private class FakeMediaContentProvider : ContentProvider() {
         private lateinit var db: SQLiteDatabase
 

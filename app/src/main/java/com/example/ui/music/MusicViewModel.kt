@@ -20,6 +20,7 @@ import com.example.data.db.PlaylistSongEntity
 import com.example.data.model.AlbumItem
 import com.example.data.model.AudioTrack
 import com.example.data.model.FolderItem
+import com.example.playback.EqualizerController
 import com.example.playback.EqualizerState
 import com.example.playback.MusicPlaybackService
 import com.example.playback.MusicPlayerManager
@@ -105,9 +106,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val playlists = database.playlistDao().getAllPlaylists()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    val equalizerState: StateFlow<EqualizerState> =
-        MusicPlaybackService.serviceInstance?.equalizerController?.state
-            ?: MutableStateFlow(EqualizerState())
+    private val equalizerController = EqualizerController.getInstance(application)
+    val equalizerState: StateFlow<EqualizerState> = equalizerController.state
 
     init {
         scanMediaLibrary()
@@ -521,15 +521,62 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setEqualizerEnabled(enabled: Boolean) {
-        MusicPlaybackService.serviceInstance?.equalizerController?.setEnabled(enabled)
+        equalizerController.setEnabled(enabled)
+    }
+
+    fun setEqualizerBandGain(bandIndex: Int, gainDb: Float) {
+        equalizerController.setBandGain(bandIndex, gainDb)
+    }
+
+    fun setEqualizerPreset(presetName: String) {
+        equalizerController.setPreset(presetName)
     }
 
     fun setEqualizerPreset(presetIndex: Int) {
-        MusicPlaybackService.serviceInstance?.equalizerController?.setPreset(presetIndex)
+        val list = equalizerState.value.presets
+        if (presetIndex in list.indices) {
+            equalizerController.setPreset(list[presetIndex])
+        }
+    }
+
+    fun resetEqualizerBands() {
+        equalizerController.resetBands()
+    }
+
+    fun setBassBoostEnabled(enabled: Boolean) {
+        equalizerController.setBassBoostEnabled(enabled)
+    }
+
+    fun setBassBoostStrength(strength: Int) {
+        equalizerController.setBassBoostStrength(strength)
     }
 
     fun setBassBoost(strength: Int) {
-        MusicPlaybackService.serviceInstance?.equalizerController?.setBassBoost(strength)
+        equalizerController.setBassBoostStrength(strength)
+    }
+
+    fun setVirtualizerEnabled(enabled: Boolean) {
+        equalizerController.setVirtualizerEnabled(enabled)
+    }
+
+    fun setVirtualizerStrength(strength: Int) {
+        equalizerController.setVirtualizerStrength(strength)
+    }
+
+    fun setPreampGain(gainDb: Float) {
+        equalizerController.setPreampGain(gainDb)
+    }
+
+    fun resetPreamp() {
+        equalizerController.resetPreamp()
+    }
+
+    fun saveCustomPreset(name: String) {
+        equalizerController.saveCustomPreset(name)
+    }
+
+    fun deleteCustomPreset(name: String) {
+        equalizerController.deleteCustomPreset(name)
     }
 
     fun requestDeleteTrack(track: AudioTrack) {

@@ -64,7 +64,21 @@
     <string name="equalizer_enable">Enable Equalizer</string>
     <string name="equalizer_preset">Audio Preset</string>
     <string name="equalizer_bass_boost">Bass Boost</string>
+    <string name="equalizer_virtualizer">Virtualizer</string>
+    <string name="equalizer_preamp">Preamp</string>
+    <string name="equalizer_preamp_reset">Reset Preamp</string>
     <string name="equalizer_not_supported">Equalizer not supported on this device</string>
+    <string name="equalizer_preamp_not_supported">Preamp not supported on this device</string>
+    <string name="equalizer_bass_not_supported">Bass Boost not supported on this device</string>
+    <string name="equalizer_virtualizer_not_supported">Virtualizer not supported on this device</string>
+    <string name="equalizer_graphic_title">Graphic Equalizer</string>
+    <string name="equalizer_effects_title">Audio Effects</string>
+    <string name="equalizer_save_preset">Save Preset</string>
+    <string name="equalizer_custom_preset_hint">Preset Name</string>
+    <string name="equalizer_delete_preset">Delete Preset</string>
+    <string name="equalizer_reset_all">Reset Bands</string>
+    <string name="equalizer_zero_db">0 dB</string>
+    <string name="equalizer_bypassed">Equalizer is disabled</string>
 
     <!-- Playlist -->
     <string name="playlist_create">Create New Playlist</string>

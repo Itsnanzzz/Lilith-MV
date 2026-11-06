@@ -37,7 +37,8 @@ class MusicPlaybackService : MediaSessionService() {
     lateinit var player: ExoPlayer
         private set
 
-    val equalizerController = EqualizerController()
+    val equalizerController: EqualizerController
+        get() = EqualizerController.getInstance(this)
 
     var currentFormatInfo: AudioFormatInfo = AudioFormatInfo()
         private set
@@ -88,7 +89,7 @@ class MusicPlaybackService : MediaSessionService() {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
                 super.onAudioSessionIdChanged(audioSessionId)
                 if (audioSessionId > 0) {
-                    equalizerController.bindAudioSession(audioSessionId)
+                    equalizerController.bindAudioSession(audioSessionId, player)
                 }
             }
 

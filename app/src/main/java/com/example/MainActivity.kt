@@ -68,6 +68,7 @@ import com.example.data.MediaRepository
 import com.example.data.ThemeMode
 import com.example.data.AppAccent
 import com.example.ui.common.PermissionView
+import com.example.ui.music.AudioEqualizerSheet
 import com.example.ui.music.EqualizerDialog
 import com.example.ui.music.MiniPlayer
 import com.example.ui.music.MusicScreen
@@ -550,13 +551,22 @@ fun MainAppContainer(
             )
         }
 
-        // Equalizer Dialog
+        // Audio Equalizer Sheet
         if (musicUiState.isEqualizerDialogVisible) {
-            EqualizerDialog(
+            AudioEqualizerSheet(
                 state = equalizerState,
                 onToggleEnabled = { musicViewModel.setEqualizerEnabled(it) },
-                onSelectPreset = { musicViewModel.setEqualizerPreset(it) },
-                onSetBassBoost = { musicViewModel.setBassBoost(it) },
+                onBandGainChange = { bandIndex, gainDb -> musicViewModel.setEqualizerBandGain(bandIndex, gainDb) },
+                onSelectPreset = { presetName -> musicViewModel.setEqualizerPreset(presetName) },
+                onResetBands = { musicViewModel.resetEqualizerBands() },
+                onToggleBassBoost = { musicViewModel.setBassBoostEnabled(it) },
+                onBassBoostChange = { musicViewModel.setBassBoostStrength(it) },
+                onToggleVirtualizer = { musicViewModel.setVirtualizerEnabled(it) },
+                onVirtualizerChange = { musicViewModel.setVirtualizerStrength(it) },
+                onPreampChange = { musicViewModel.setPreampGain(it) },
+                onResetPreamp = { musicViewModel.resetPreamp() },
+                onSaveCustomPreset = { musicViewModel.saveCustomPreset(it) },
+                onDeleteCustomPreset = { musicViewModel.deleteCustomPreset(it) },
                 onDismiss = { musicViewModel.setEqualizerDialogVisible(false) }
             )
         }
