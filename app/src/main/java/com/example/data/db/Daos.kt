@@ -49,6 +49,9 @@ interface VideoProgressDao {
     @Query("SELECT * FROM video_playback_positions WHERE videoUri = :videoUri LIMIT 1")
     suspend fun getPosition(videoUri: String): VideoPlaybackPositionEntity?
 
+    @Query("SELECT * FROM video_playback_positions WHERE title = :title LIMIT 1")
+    suspend fun getPositionByTitle(title: String): VideoPlaybackPositionEntity?
+
     @Query("SELECT * FROM video_playback_positions WHERE videoUri = :videoUri LIMIT 1")
     fun getPositionFlow(videoUri: String): Flow<VideoPlaybackPositionEntity?>
 

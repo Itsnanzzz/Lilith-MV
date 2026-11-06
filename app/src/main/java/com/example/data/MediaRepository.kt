@@ -174,20 +174,24 @@ class MediaRepository(private val context: Context) {
         videos
     }
 
-    suspend fun parseTrackFromUri(uri: Uri): AudioTrack? = withContext(Dispatchers.IO) {
+    suspend fun parseTrackFromUri(uri: Uri, displayName: String? = null): AudioTrack = withContext(Dispatchers.IO) {
+        val fallbackTitle = displayName?.substringBeforeLast('.')?.takeIf { it.isNotBlank() }
+            ?: uri.lastPathSegment?.substringAfterLast('/')?.substringBeforeLast('.')?.takeIf { it.isNotBlank() }
+            ?: context.getString(R.string.default_song_title)
+
         try {
             val retriever = MediaMetadataRetriever()
             retriever.setDataSource(context, uri)
-            val title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
-                ?: uri.lastPathSegment?.substringAfterLast('/')?.substringBeforeLast('.')
-                ?: context.getString(R.string.default_audio_track)
+            val metaTitle = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
+            val title = if (!metaTitle.isNullOrBlank()) metaTitle else fallbackTitle
             val artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
-                ?: context.getString(R.string.unknown_artist)
+                ?.takeIf { it.isNotBlank() } ?: context.getString(R.string.unknown_artist)
             val album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)
-                ?: context.getString(R.string.unknown_album)
+                ?.takeIf { it.isNotBlank() } ?: context.getString(R.string.unknown_album)
             val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
             val duration = durationStr?.toLongOrNull() ?: 0L
             val mime = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE)
+            val hasArt = retriever.embeddedPicture != null
             retriever.release()
 
             AudioTrack(
@@ -197,29 +201,35 @@ class MediaRepository(private val context: Context) {
                 artist = artist,
                 album = album,
                 durationMs = duration,
-                path = uri.path ?: "",
+                path = if (uri.scheme == "file") (uri.path ?: "") else "",
                 folderName = context.getString(R.string.subtitle_external_file),
                 mimeType = mime,
-                albumArtUri = uri.toString()
+                albumArtUri = if (hasArt) uri.toString() else null
             )
         } catch (e: Exception) {
             AudioTrack(
                 id = System.currentTimeMillis(),
                 uri = uri.toString(),
-                title = uri.lastPathSegment?.substringAfterLast('/') ?: context.getString(R.string.default_audio_track),
+                title = fallbackTitle,
                 artist = context.getString(R.string.unknown_artist),
-                album = context.getString(R.string.default_album_title),
-                durationMs = 0L
+                album = context.getString(R.string.unknown_album),
+                durationMs = 0L,
+                path = if (uri.scheme == "file") (uri.path ?: "") else "",
+                folderName = context.getString(R.string.subtitle_external_file),
+                mimeType = null,
+                albumArtUri = null
             )
         }
     }
 
-    suspend fun parseVideoFromUri(uri: Uri): VideoItem? = withContext(Dispatchers.IO) {
+    suspend fun parseVideoFromUri(uri: Uri, displayName: String? = null, size: Long = 0L): VideoItem = withContext(Dispatchers.IO) {
+        val fallbackTitle = displayName?.substringBeforeLast('.')?.takeIf { it.isNotBlank() }
+            ?: uri.lastPathSegment?.substringAfterLast('/')?.substringBeforeLast('.')?.takeIf { it.isNotBlank() }
+            ?: context.getString(R.string.default_video_folder)
+
         try {
             val retriever = MediaMetadataRetriever()
             retriever.setDataSource(context, uri)
-            val title = uri.lastPathSegment?.substringAfterLast('/')?.substringBeforeLast('.')
-                ?: context.getString(R.string.default_video_folder)
             val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
             val duration = durationStr?.toLongOrNull() ?: 0L
             val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
@@ -229,11 +239,12 @@ class MediaRepository(private val context: Context) {
             VideoItem(
                 id = System.currentTimeMillis(),
                 uri = uri.toString(),
-                title = title,
+                title = fallbackTitle,
                 durationMs = duration,
                 width = width,
                 height = height,
-                path = uri.path ?: "",
+                size = size,
+                path = if (uri.scheme == "file") (uri.path ?: "") else "",
                 folderName = context.getString(R.string.subtitle_external_file),
                 thumbnailUri = uri.toString()
             )
@@ -241,10 +252,72 @@ class MediaRepository(private val context: Context) {
             VideoItem(
                 id = System.currentTimeMillis(),
                 uri = uri.toString(),
-                title = uri.lastPathSegment?.substringAfterLast('/') ?: context.getString(R.string.default_video_folder),
-                durationMs = 0L
+                title = fallbackTitle,
+                durationMs = 0L,
+                size = size,
+                path = if (uri.scheme == "file") (uri.path ?: "") else "",
+                folderName = context.getString(R.string.subtitle_external_file),
+                thumbnailUri = uri.toString()
             )
         }
+    }
+
+    suspend fun findMatchingTrack(uri: Uri, displayName: String?, size: Long): AudioTrack? = withContext(Dispatchers.IO) {
+        val tracks = getAudioTracks()
+        val uriStr = uri.toString()
+
+        tracks.find { it.uri == uriStr }?.let { return@withContext it }
+
+        val uriId = try {
+            if (uri.scheme == ContentResolver.SCHEME_CONTENT && uri.authority == "media") {
+                ContentUris.parseId(uri)
+            } else null
+        } catch (_: Exception) { null }
+        if (uriId != null) {
+            tracks.find { it.id == uriId }?.let { return@withContext it }
+        }
+
+        if (!displayName.isNullOrBlank()) {
+            val nameWithoutExt = displayName.substringBeforeLast('.')
+            tracks.find { t ->
+                val matchName = t.title.equals(displayName, ignoreCase = true) ||
+                        t.title.equals(nameWithoutExt, ignoreCase = true) ||
+                        (t.path.isNotEmpty() && File(t.path).name.equals(displayName, ignoreCase = true))
+                val matchSize = size <= 0L || (t.path.isNotEmpty() && File(t.path).length() == size)
+                matchName && matchSize
+            }?.let { return@withContext it }
+        }
+
+        null
+    }
+
+    suspend fun findMatchingVideo(uri: Uri, displayName: String?, size: Long): VideoItem? = withContext(Dispatchers.IO) {
+        val videos = getVideos()
+        val uriStr = uri.toString()
+
+        videos.find { it.uri == uriStr }?.let { return@withContext it }
+
+        val uriId = try {
+            if (uri.scheme == ContentResolver.SCHEME_CONTENT && uri.authority == "media") {
+                ContentUris.parseId(uri)
+            } else null
+        } catch (_: Exception) { null }
+        if (uriId != null) {
+            videos.find { it.id == uriId }?.let { return@withContext it }
+        }
+
+        if (!displayName.isNullOrBlank()) {
+            val nameWithoutExt = displayName.substringBeforeLast('.')
+            videos.find { v ->
+                val matchName = v.title.equals(displayName, ignoreCase = true) ||
+                        v.title.equals(nameWithoutExt, ignoreCase = true) ||
+                        (v.path.isNotEmpty() && File(v.path).name.equals(displayName, ignoreCase = true))
+                val matchSize = size <= 0L || v.size == size || (v.path.isNotEmpty() && File(v.path).length() == size)
+                matchName && matchSize
+            }?.let { return@withContext it }
+        }
+
+        null
     }
 
     suspend fun findMatchingSubtitles(videoPath: String?): List<SubtitleTrackInfo> = withContext(Dispatchers.IO) {
