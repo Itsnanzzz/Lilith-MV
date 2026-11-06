@@ -183,6 +183,7 @@ fun AppPrimaryButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     icon: ImageVector? = null,
     testTag: String? = null
 ) {
@@ -192,18 +193,21 @@ fun AppPrimaryButton(
     val isPressed by interactionSource.collectIsPressedAsState()
 
     val scale by animateFloatAsState(
-        targetValue = if (!isAnimationDisabled && isPressed) 0.96f else 1.0f,
+        targetValue = if (!isAnimationDisabled && isPressed && enabled) 0.96f else 1.0f,
         animationSpec = tween(durationMillis = AppTokens.AnimDurationShort),
         label = "primary_btn_scale"
     )
 
     Button(
         onClick = onClick,
+        enabled = enabled,
         interactionSource = interactionSource,
         shape = RoundedCornerShape(AppTokens.RadiusPill),
         colors = ButtonDefaults.buttonColors(
             containerColor = colors.accent,
-            contentColor = colors.onAccent
+            contentColor = colors.onAccent,
+            disabledContainerColor = colors.accent.copy(alpha = 0.4f),
+            disabledContentColor = colors.onAccent.copy(alpha = 0.6f)
         ),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
         modifier = modifier

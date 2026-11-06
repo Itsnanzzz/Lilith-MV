@@ -1,7 +1,11 @@
 package com.example.ui.video
 
+import android.app.Activity
+import android.content.ClipData
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,9 +19,11 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
@@ -29,12 +35,22 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,6 +64,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -82,7 +99,7 @@ import kotlin.math.abs
  * - 32dp AppChip filter row for video folders with smooth auto-scrolling
  * - HorizontalPager for "All" + each folder page
  * - Flat list of video rows with 16:9 rounded thumbnails (12dp radius), duration badge pill,
- *   15sp SemiBold title, and 13sp folder/resolution metadata
+ *   15sp SemiBold title, 13sp folder/resolution metadata, and three-dot action menu.
  */
 @Composable
 fun VideoLibraryScreen(
@@ -91,14 +108,71 @@ fun VideoLibraryScreen(
     modifier: Modifier = Modifier
 ) {
     val colors = AppThemeTokens.colors
+    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     val coroutineScope = rememberCoroutineScope()
     val isAnimationDisabled = rememberIsAnimationDisabled()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     val safVideoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let { viewModel.openSafVideo(it) }
+    }
+
+    val intentSenderLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        viewModel.onIntentSenderResult(result.resultCode == Activity.RESULT_OK)
+    }
+
+    val storagePermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        viewModel.onStoragePermissionResult(isGranted)
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.actionEvents.collect { event ->
+            when (event) {
+                is VideoActionEvent.LaunchIntentSender -> {
+                    intentSenderLauncher.launch(
+                        IntentSenderRequest.Builder(event.intentSender).build()
+                    )
+                }
+                is VideoActionEvent.RequestStoragePermission -> {
+                    storagePermissionLauncher.launch(event.permission)
+                }
+                is VideoActionEvent.ShowMessage -> {
+                    snackbarHostState.showSnackbar(event.message)
+                }
+            }
+        }
+    }
+
+    val onShareVideo: (VideoItem) -> Unit = { video ->
+        try {
+            val uri = Uri.parse(video.uri)
+            if (uri.scheme == "file") {
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar(context.getString(R.string.cant_share_file))
+                }
+            } else {
+                val mime = video.mimeType.takeIf { it.isNotBlank() } ?: "video/*"
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = mime
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    clipData = ClipData.newUri(context.contentResolver, "video", uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                val chooser = Intent.createChooser(shareIntent, context.getString(R.string.share_video_title))
+                context.startActivity(chooser)
+            }
+        } catch (_: Exception) {
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar(context.getString(R.string.cant_share_file))
+            }
+        }
     }
 
     // Single source of truth for selected folder by name
@@ -132,7 +206,7 @@ fun VideoLibraryScreen(
         }
     }
 
-    // Keep user on the same folder when folder list updates (scan, new video, deleted video).
+    // Keep user on the same folder when folder list updates.
     // Fall back to "All" (page 0) if current folder disappears.
     LaunchedEffect(uiState.folders) {
         val currentName = selectedFolderName
@@ -163,204 +237,258 @@ fun VideoLibraryScreen(
         }
     }
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
             .background(colors.background)
             .testTag("video_library_screen")
     ) {
-        // 1. Search Bar & Action Buttons (Matches Music Tab Top Row)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = AppTokens.ScreenHorizontalPadding, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AppSearchField(
-                query = uiState.searchQuery,
-                onQueryChange = { viewModel.setSearchQuery(it) },
-                placeholder = stringResource(R.string.search_placeholder),
-                modifier = Modifier.weight(1f),
-                testTag = "search_video_input"
-            )
+        Column(modifier = Modifier.fillMaxSize()) {
+            // 1. Search Bar & Action Buttons (Matches Music Tab Top Row)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = AppTokens.ScreenHorizontalPadding, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AppSearchField(
+                    query = uiState.searchQuery,
+                    onQueryChange = { viewModel.setSearchQuery(it) },
+                    placeholder = stringResource(R.string.search_placeholder),
+                    modifier = Modifier.weight(1f),
+                    testTag = "search_video_input"
+                )
 
-            Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
-            // Open Video from file system (SAF) - 40dp tonal circle button
-            AppIconButton(
-                onClick = { safVideoLauncher.launch(arrayOf("video/*")) },
-                icon = Icons.Default.FileOpen,
-                contentDescription = stringResource(R.string.open_saf_file),
-                isTonalCircle = true,
-                iconSize = 20.dp,
-                testTag = "open_saf_video_button"
-            )
+                // Open Video from file system (SAF) - 40dp tonal circle button
+                AppIconButton(
+                    onClick = { safVideoLauncher.launch(arrayOf("video/*")) },
+                    icon = Icons.Default.FileOpen,
+                    contentDescription = stringResource(R.string.open_saf_file),
+                    isTonalCircle = true,
+                    iconSize = 20.dp,
+                    testTag = "open_saf_video_button"
+                )
 
-            Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(6.dp))
 
-            // Refresh library - 40dp tonal circle button
-            AppIconButton(
-                onClick = { viewModel.scanVideos() },
-                icon = Icons.Default.Refresh,
-                contentDescription = stringResource(R.string.scan_library),
-                isTonalCircle = true,
-                iconSize = 20.dp,
-                testTag = "refresh_videos_button"
-            )
-        }
-
-        // 2. Folder filter chips row (Auto-scrolls to selected chip with end padding)
-        LazyRow(
-            state = chipsLazyRowState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            contentPadding = PaddingValues(
-                start = AppTokens.ScreenHorizontalPadding,
-                end = AppTokens.ScreenHorizontalPadding + 16.dp
-            ),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            item(key = "All") {
-                val isSelected = pagerState.currentPage == 0
-                AppChip(
-                    text = stringResource(R.string.filter_all_count, uiState.allVideos.size),
-                    selected = isSelected,
-                    onClick = { onChipClick(0) },
-                    testTag = "chip_video_folder_all"
+                // Refresh library - 40dp tonal circle button
+                AppIconButton(
+                    onClick = { viewModel.scanVideos() },
+                    icon = Icons.Default.Refresh,
+                    contentDescription = stringResource(R.string.scan_library),
+                    isTonalCircle = true,
+                    iconSize = 20.dp,
+                    testTag = "refresh_videos_button"
                 )
             }
-            itemsIndexed(
-                items = uiState.folders,
-                key = { _, folder -> folder.name }
-            ) { index, folder ->
-                val pageIndex = index + 1
-                val isSelected = pagerState.currentPage == pageIndex
-                AppChip(
-                    text = "${folder.name} (${folder.trackCount})",
-                    selected = isSelected,
-                    onClick = { onChipClick(pageIndex) },
-                    testTag = "chip_video_folder_${folder.name.lowercase()}"
-                )
-            }
-        }
 
-        Spacer(modifier = Modifier.height(6.dp))
-
-        // 3. Swipeable Horizontal Pager across folder pages
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-        ) {
-            if (uiState.isScanning) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(
-                        color = colors.primary,
-                        modifier = Modifier.size(36.dp)
+            // 2. Folder filter chips row (Auto-scrolls to selected chip with end padding)
+            LazyRow(
+                state = chipsLazyRowState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                contentPadding = PaddingValues(
+                    start = AppTokens.ScreenHorizontalPadding,
+                    end = AppTokens.ScreenHorizontalPadding + 16.dp
+                ),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item(key = "All") {
+                    val isSelected = pagerState.currentPage == 0
+                    AppChip(
+                        text = stringResource(R.string.filter_all_count, uiState.allVideos.size),
+                        selected = isSelected,
+                        onClick = { onChipClick(0) },
+                        testTag = "chip_video_folder_all"
                     )
                 }
-            } else {
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier.fillMaxSize(),
-                    beyondViewportPageCount = 0,
-                    key = { page ->
-                        if (page == 0) "All" else uiState.folders.getOrNull(page - 1)?.name ?: "page_$page"
-                    }
-                ) { page ->
-                    val pageKey = if (page == 0) "All" else uiState.folders.getOrNull(page - 1)?.name ?: "page_$page"
-                    val listState = listStates.getOrPut(pageKey) { LazyListState() }
+                itemsIndexed(
+                    items = uiState.folders,
+                    key = { _, folder -> folder.name }
+                ) { index, folder ->
+                    val pageIndex = index + 1
+                    val isSelected = pagerState.currentPage == pageIndex
+                    AppChip(
+                        text = "${folder.name} (${folder.trackCount})",
+                        selected = isSelected,
+                        onClick = { onChipClick(pageIndex) },
+                        testTag = "chip_video_folder_${folder.name.lowercase()}"
+                    )
+                }
+            }
 
-                    val displayVideos = remember(uiState.allVideos, uiState.folders, uiState.searchQuery, page) {
-                        val folderVideos = if (page == 0) {
-                            uiState.allVideos
-                        } else {
-                            val fName = uiState.folders.getOrNull(page - 1)?.name
-                            if (fName != null) uiState.allVideos.filter { it.folderName == fName } else emptyList()
-                        }
-                        if (uiState.searchQuery.isNotBlank()) {
-                            val q = uiState.searchQuery.lowercase()
-                            folderVideos.filter { it.title.lowercase().contains(q) }
-                        } else {
-                            folderVideos
-                        }
-                    }
+            Spacer(modifier = Modifier.height(6.dp))
 
-                    if (displayVideos.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(32.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Videocam,
-                                    contentDescription = null,
-                                    tint = colors.textSecondary.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(44.dp)
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(
-                                    text = stringResource(R.string.empty_video_list),
-                                    style = AppTypography.body.copy(fontWeight = FontWeight.Medium),
-                                    color = colors.textPrimary
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = stringResource(R.string.empty_video_subtitle),
-                                    style = AppTypography.caption,
-                                    color = colors.textSecondary
-                                )
+            // 3. Swipeable Horizontal Pager across folder pages
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
+                if (uiState.isScanning) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = colors.primary,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+                } else {
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxSize(),
+                        beyondViewportPageCount = 0,
+                        key = { page ->
+                            if (page == 0) "All" else uiState.folders.getOrNull(page - 1)?.name ?: "page_$page"
+                        }
+                    ) { page ->
+                        val pageKey = if (page == 0) "All" else uiState.folders.getOrNull(page - 1)?.name ?: "page_$page"
+                        val listState = listStates.getOrPut(pageKey) { LazyListState() }
+
+                        val displayVideos = remember(uiState.allVideos, uiState.folders, uiState.searchQuery, page) {
+                            val folderVideos = if (page == 0) {
+                                uiState.allVideos
+                            } else {
+                                val fName = uiState.folders.getOrNull(page - 1)?.name
+                                if (fName != null) uiState.allVideos.filter { it.folderName == fName } else emptyList()
+                            }
+                            if (uiState.searchQuery.isNotBlank()) {
+                                val q = uiState.searchQuery.lowercase()
+                                folderVideos.filter { it.title.lowercase().contains(q) }
+                            } else {
+                                folderVideos
                             }
                         }
-                    } else {
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(
-                                start = AppTokens.ScreenHorizontalPadding,
-                                top = 6.dp,
-                                end = AppTokens.ScreenHorizontalPadding,
-                                bottom = 20.dp
-                            ),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            items(
-                                items = displayVideos,
-                                key = { it.uri }
-                            ) { video ->
-                                VideoCardItem(
-                                    video = video,
-                                    onClick = { onVideoSelected(video) }
-                                )
+
+                        if (displayVideos.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(32.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Videocam,
+                                        contentDescription = null,
+                                        tint = colors.textSecondary.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(44.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Text(
+                                        text = stringResource(R.string.empty_video_list),
+                                        style = AppTypography.body.copy(fontWeight = FontWeight.Medium),
+                                        color = colors.textPrimary
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = stringResource(R.string.empty_video_subtitle),
+                                        style = AppTypography.caption,
+                                        color = colors.textSecondary
+                                    )
+                                }
+                            }
+                        } else {
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(
+                                    start = AppTokens.ScreenHorizontalPadding,
+                                    top = 6.dp,
+                                    end = AppTokens.ScreenHorizontalPadding,
+                                    bottom = 20.dp
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                items(
+                                    items = displayVideos,
+                                    key = { it.uri }
+                                ) { video ->
+                                    VideoCardItem(
+                                        video = video,
+                                        onClick = { onVideoSelected(video) },
+                                        isOperating = uiState.operatingVideoId == video.id,
+                                        onInfoClick = { viewModel.showInfo(video) },
+                                        onShareClick = { onShareVideo(video) },
+                                        onRenameClick = { viewModel.showRenameDialog(video) },
+                                        onDeleteClick = { viewModel.showDeleteDialog(video) }
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+        )
+    }
+
+    // --- Action Dialogs ---
+    uiState.videoForInfo?.let { video ->
+        VideoInfoDialog(
+            video = video,
+            onDismiss = { viewModel.dismissInfo() },
+            onCopyPath = {
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar(context.getString(R.string.copied))
+                }
+            },
+            loadExtraInfo = { viewModel.loadExtraInfo(it) }
+        )
+    }
+
+    uiState.videoToRename?.let { video ->
+        VideoRenameDialog(
+            video = video,
+            isRenaming = uiState.isRenamingVideo,
+            onConfirm = { newFullName -> viewModel.confirmRename(video, newFullName) },
+            onDismiss = { viewModel.dismissRenameDialog() },
+            validateName = { rawText -> viewModel.validateNewName(video, rawText) }
+        )
+    }
+
+    uiState.videoToDelete?.let { video ->
+        VideoDeleteConfirmationDialog(
+            video = video,
+            isDeleting = uiState.isDeletingVideo,
+            onConfirm = { viewModel.confirmDelete() },
+            onDismiss = { viewModel.dismissDeleteDialog() }
+        )
     }
 }
 
 /**
  * Clean Flat Video Row Item:
- * 16:9 thumbnail on the left (12dp radius) with duration badge, title & metadata on the right.
+ * 16:9 thumbnail on the left (12dp radius) with duration badge, title & metadata in the middle,
+ * and three-dot more options action menu on the right.
  */
 @Composable
 fun VideoCardItem(
     video: VideoItem,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    isOperating: Boolean = false,
+    onInfoClick: () -> Unit = {},
+    onShareClick: () -> Unit = {},
+    onRenameClick: () -> Unit = {},
+    onDeleteClick: () -> Unit = {}
 ) {
     val colors = AppThemeTokens.colors
     val itemShape = RoundedCornerShape(AppTokens.Radius12)
+    var menuExpanded by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier
@@ -368,7 +496,7 @@ fun VideoCardItem(
             .clip(itemShape)
             .background(colors.surface)
             .clickable(onClick = onClick)
-            .padding(vertical = 4.dp)
+            .padding(vertical = 4.dp, horizontal = 4.dp)
             .testTag("video_item_${video.id}"),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -444,7 +572,7 @@ fun VideoCardItem(
 
         Spacer(modifier = Modifier.width(12.dp))
 
-        // Video Title & Metadata on the RIGHT
+        // Video Title & Metadata in the MIDDLE
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -478,72 +606,164 @@ fun VideoCardItem(
                 }
             }
         }
+
+        // Three-Dot Action Menu Button on the RIGHT
+        Box(contentAlignment = Alignment.Center) {
+            AppIconButton(
+                onClick = { menuExpanded = true },
+                icon = Icons.Default.MoreVert,
+                contentDescription = stringResource(R.string.more_options),
+                iconSize = 20.dp,
+                tintOverride = colors.textSecondary,
+                testTag = "video_more_button_${video.id}"
+            )
+
+            DropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { menuExpanded = false },
+                modifier = Modifier
+                    .widthIn(min = 180.dp, max = 220.dp)
+                    .shadow(elevation = 8.dp, shape = RoundedCornerShape(AppTokens.Radius16))
+                    .background(colors.surface, shape = RoundedCornerShape(AppTokens.Radius16))
+            ) {
+                // 1. Info
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = stringResource(R.string.action_info),
+                            color = colors.textPrimary,
+                            style = AppTypography.body
+                        )
+                    },
+                    onClick = {
+                        menuExpanded = false
+                        onInfoClick()
+                    },
+                    enabled = !isOperating,
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = stringResource(R.string.action_info),
+                            tint = colors.textPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    },
+                    modifier = Modifier.testTag("video_menu_info_${video.id}")
+                )
+
+                // 2. Share
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = stringResource(R.string.action_share),
+                            color = colors.textPrimary,
+                            style = AppTypography.body
+                        )
+                    },
+                    onClick = {
+                        menuExpanded = false
+                        onShareClick()
+                    },
+                    enabled = !isOperating,
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = stringResource(R.string.action_share),
+                            tint = colors.textPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    },
+                    modifier = Modifier.testTag("video_menu_share_${video.id}")
+                )
+
+                // 3. Rename
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = stringResource(R.string.action_rename),
+                            color = colors.textPrimary,
+                            style = AppTypography.body
+                        )
+                    },
+                    onClick = {
+                        menuExpanded = false
+                        onRenameClick()
+                    },
+                    enabled = !isOperating,
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = stringResource(R.string.action_rename),
+                            tint = colors.textPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    },
+                    modifier = Modifier.testTag("video_menu_rename_${video.id}")
+                )
+
+                // Hairline divider
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    color = colors.hairline
+                )
+
+                // 4. Delete
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = stringResource(R.string.delete),
+                            color = colors.destructive,
+                            style = AppTypography.body.copy(fontWeight = FontWeight.Medium)
+                        )
+                    },
+                    onClick = {
+                        menuExpanded = false
+                        onDeleteClick()
+                    },
+                    enabled = !isOperating,
+                    leadingIcon = {
+                        if (isOperating) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = colors.destructive
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.DeleteForever,
+                                contentDescription = stringResource(R.string.delete),
+                                tint = colors.destructive,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    },
+                    modifier = Modifier.testTag("video_menu_delete_${video.id}")
+                )
+            }
+        }
     }
 }
 
 @Preview(name = "Video Library - All Light", showBackground = true, backgroundColor = 0xFFFFFFFF)
 @Composable
-fun VideoLibraryAllLightPreview() {
+private fun VideoLibraryPreview() {
     LilithTheme(darkTheme = false) {
-        val sampleVideos = listOf(
-            VideoItem(id = 1, uri = "v1", title = "Nature Walk in Forest.mp4", durationMs = 125000, height = 1080, folderName = "Camera", path = "/storage/emulated/0/DCIM/Camera/Nature.mp4"),
-            VideoItem(id = 2, uri = "v2", title = "Tutorial Animation.mp4", durationMs = 45000, height = 720, folderName = "Downloads", path = "/storage/emulated/0/Download/Tutorial.mp4")
+        VideoCardItem(
+            video = VideoItem(
+                id = 1L,
+                uri = "",
+                title = "Sample Video Presentation 2024",
+                durationMs = 125000L,
+                width = 1920,
+                height = 1080,
+                folderName = "Camera"
+            ),
+            onClick = {},
+            isOperating = false,
+            onInfoClick = {},
+            onShareClick = {},
+            onRenameClick = {},
+            onDeleteClick = {}
         )
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(AppThemeTokens.colors.background)
-        ) {
-            LazyRow(
-                modifier = Modifier.padding(vertical = 10.dp),
-                contentPadding = PaddingValues(horizontal = AppTokens.ScreenHorizontalPadding),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                item { AppChip(text = "All (2)", selected = true, onClick = {}) }
-                item { AppChip(text = "Camera (1)", selected = false, onClick = {}) }
-                item { AppChip(text = "Downloads (1)", selected = false, onClick = {}) }
-            }
-            LazyColumn(
-                contentPadding = PaddingValues(horizontal = AppTokens.ScreenHorizontalPadding),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(sampleVideos) { video ->
-                    VideoCardItem(video = video, onClick = {})
-                }
-            }
-        }
     }
 }
-
-@Preview(name = "Video Library - Folder Dark", showBackground = true, backgroundColor = 0xFF0E1117)
-@Composable
-fun VideoLibraryFolderDarkPreview() {
-    LilithTheme(darkTheme = true) {
-        val sampleVideos = listOf(
-            VideoItem(id = 1, uri = "v1", title = "Nature Walk in Forest.mp4", durationMs = 125000, height = 1080, folderName = "Camera", path = "/storage/emulated/0/DCIM/Camera/Nature.mp4")
-        )
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(AppThemeTokens.colors.background)
-        ) {
-            LazyRow(
-                modifier = Modifier.padding(vertical = 10.dp),
-                contentPadding = PaddingValues(horizontal = AppTokens.ScreenHorizontalPadding),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                item { AppChip(text = "All (1)", selected = false, onClick = {}) }
-                item { AppChip(text = "Camera (1)", selected = true, onClick = {}) }
-            }
-            LazyColumn(
-                contentPadding = PaddingValues(horizontal = AppTokens.ScreenHorizontalPadding),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(sampleVideos) { video ->
-                    VideoCardItem(video = video, onClick = {})
-                }
-            }
-        }
-    }
-}
-

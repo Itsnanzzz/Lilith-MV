@@ -1,6 +1,7 @@
 package com.example.data.model
 
 import android.net.Uri
+import java.io.File
 
 data class AudioTrack(
     val id: Long,
@@ -27,7 +28,50 @@ data class VideoItem(
     val dateModified: Long = 0L,
     val path: String = "",
     val folderName: String = "",
-    val thumbnailUri: String? = null
+    val thumbnailUri: String? = null,
+    val displayName: String = "",
+    val mimeType: String = "",
+    val dateAdded: Long = 0L,
+    val relativePath: String = ""
+) {
+    val extension: String
+        get() {
+            if (displayName.contains('.')) return displayName.substringAfterLast('.')
+            if (path.contains('.')) return path.substringAfterLast('.')
+            return ""
+        }
+
+    val fullDisplayName: String
+        get() {
+            if (displayName.isNotBlank()) return displayName
+            if (path.isNotBlank()) return File(path).name
+            val ext = extension
+            return if (ext.isNotEmpty()) "$title.$ext" else title
+        }
+
+    val baseName: String
+        get() {
+            if (displayName.isNotBlank() && displayName.contains('.')) return displayName.substringBeforeLast('.')
+            if (path.isNotBlank() && path.contains('.')) return File(path).nameWithoutExtension
+            return title
+        }
+
+    val folderPath: String
+        get() {
+            if (relativePath.isNotBlank()) {
+                val cleanRel = if (relativePath.endsWith('/')) relativePath else "$relativePath/"
+                return "$cleanRel$fullDisplayName"
+            }
+            if (path.isNotBlank()) return path
+            return fullDisplayName
+        }
+}
+
+data class VideoExtraInfo(
+    val videoCodec: String = "Unknown",
+    val audioCodec: String = "Unknown",
+    val frameRate: String = "Unknown",
+    val bitrate: String = "Unknown"
 )
 
 data class AudioFormatInfo(

@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
@@ -60,4 +61,27 @@ interface VideoProgressDao {
 
     @Query("DELETE FROM video_playback_positions WHERE videoUri = :videoUri")
     suspend fun deletePosition(videoUri: String)
+
+    @Query("DELETE FROM video_playback_positions WHERE title = :title")
+    suspend fun deletePositionByTitle(title: String)
+
+    @Query("SELECT * FROM video_playback_positions WHERE videoUri = :videoUri OR title = :title LIMIT 1")
+    suspend fun getPositionByUriOrTitle(videoUri: String, title: String): VideoPlaybackPositionEntity?
+
+    @Transaction
+    suspend fun migrateProgress(oldUri: String, oldTitle: String, newUri: String, newTitle: String) {
+        val existing = getPositionByUriOrTitle(oldUri, oldTitle) ?: return
+        deletePosition(oldUri)
+        if (existing.videoUri != oldUri) {
+            deletePosition(existing.videoUri)
+        }
+        deletePositionByTitle(oldTitle)
+        savePosition(
+            existing.copy(
+                videoUri = newUri,
+                title = newTitle,
+                lastUpdated = System.currentTimeMillis()
+            )
+        )
+    }
 }
