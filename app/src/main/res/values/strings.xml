@@ -203,6 +203,8 @@
     <string name="settings_app_desc">A lightweight native media player with lossless audio and multi-format subtitle support.</string>
 
     <!-- Messages & Errors -->
+    <string name="unsupported_file">Unsupported file</string>
+    <string name="cant_open_file">Can\'t open this file</string>
     <string name="error_unsupported_codec">File format or codec is not supported by this device.</string>
     <string name="error_codec_fallback">Unsupported codec</string>
     <string name="error_skipping_next">Skipping to next track…</string>

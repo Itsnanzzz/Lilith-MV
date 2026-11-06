@@ -170,6 +170,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
             // Check if there was a saved playback position
             val savedPos = database.videoProgressDao().getPosition(video.uri)
+                ?: database.videoProgressDao().getPositionByTitle(video.title)
             if (savedPos != null && savedPos.positionMs > 5000 && (savedPos.durationMs - savedPos.positionMs) > 10000) {
                 _uiState.value = _uiState.value.copy(resumePositionMs = savedPos.positionMs)
             } else {

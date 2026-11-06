@@ -1,9 +1,14 @@
 package com.example
 
 import android.Manifest
+import android.content.ContentResolver
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.OpenableColumns
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -11,6 +16,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileNotFoundException
+import java.util.Locale
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -81,13 +91,29 @@ enum class MainNavigationTab {
 
 class MainActivity : AppCompatActivity() {
 
+    companion object {
+        private const val KEY_INTENT_HANDLED = "key_intent_handled"
+    }
+
     private val musicViewModel: MusicViewModel by viewModels()
     private val videoLibraryViewModel: VideoLibraryViewModel by viewModels()
     private val videoPlayerViewModel: VideoPlayerViewModel by viewModels()
     private val settingsViewModel: SettingsViewModel by viewModels()
 
+    private val selectedTabState = mutableStateOf(MainNavigationTab.MUSIC)
+    private val isPermissionBypassedState = mutableStateOf(false)
+    private var isIntentHandled = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        if (savedInstanceState != null) {
+            isIntentHandled = savedInstanceState.getBoolean(KEY_INTENT_HANDLED, false)
+        }
+
+        if (!isIntentHandled) {
+            handleViewIntent(intent)
+        }
 
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(
@@ -117,9 +143,181 @@ class MainActivity : AppCompatActivity() {
                     musicViewModel = musicViewModel,
                     videoLibraryViewModel = videoLibraryViewModel,
                     videoPlayerViewModel = videoPlayerViewModel,
-                    settingsViewModel = settingsViewModel
+                    settingsViewModel = settingsViewModel,
+                    selectedTab = selectedTabState.value,
+                    onTabSelected = { selectedTabState.value = it },
+                    isPermissionBypassed = isPermissionBypassedState.value
                 )
             }
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(KEY_INTENT_HANDLED, isIntentHandled)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleViewIntent(intent)
+    }
+
+    private fun handleViewIntent(intent: Intent?) {
+        if (intent == null || intent.action != Intent.ACTION_VIEW) return
+        val uri = intent.data ?: return
+
+        isIntentHandled = true
+
+        val cleanIntent = Intent(intent).apply {
+            action = Intent.ACTION_MAIN
+            data = null
+        }
+        setIntent(cleanIntent)
+
+        if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
+            try {
+                contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: SecurityException) {
+            } catch (_: Exception) {
+            }
+        }
+
+        var displayName: String? = null
+        var size: Long = 0L
+
+        try {
+            if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
+                contentResolver.query(
+                    uri,
+                    arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+                    null,
+                    null,
+                    null
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (nameIndex >= 0 && !cursor.isNull(nameIndex)) {
+                            displayName = cursor.getString(nameIndex)
+                        }
+                        val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                        if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) {
+                            size = cursor.getLong(sizeIndex)
+                        }
+                    }
+                }
+            } else if (uri.scheme == "file" || uri.scheme == null) {
+                val file = File(uri.path ?: "")
+                if (file.exists()) {
+                    displayName = file.name
+                    size = file.length()
+                } else {
+                    throw FileNotFoundException("File not found: ${uri.path}")
+                }
+            }
+        } catch (e: SecurityException) {
+            Toast.makeText(this, R.string.cant_open_file, Toast.LENGTH_SHORT).show()
+            return
+        } catch (e: FileNotFoundException) {
+            Toast.makeText(this, R.string.cant_open_file, Toast.LENGTH_SHORT).show()
+            return
+        } catch (e: IllegalArgumentException) {
+            Toast.makeText(this, R.string.cant_open_file, Toast.LENGTH_SHORT).show()
+            return
+        } catch (e: Exception) {
+            Toast.makeText(this, R.string.cant_open_file, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val mediaType = determineMediaType(uri, intent.type, displayName)
+        if (mediaType == null) {
+            Toast.makeText(this, R.string.unsupported_file, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        isPermissionBypassedState.value = true
+
+        when (mediaType) {
+            MediaType.AUDIO -> handleAudioView(uri, displayName, size)
+            MediaType.VIDEO -> handleVideoView(uri, displayName, size)
+        }
+    }
+
+    private enum class MediaType {
+        AUDIO, VIDEO
+    }
+
+    private fun determineMediaType(uri: Uri, intentType: String?, displayName: String?): MediaType? {
+        val mimeFromIntent = intentType?.takeIf {
+            it.isNotBlank() &&
+                    !it.equals("application/octet-stream", ignoreCase = true) &&
+                    !it.equals("*/*", ignoreCase = true)
+        }
+
+        val typeToTest = mimeFromIntent ?: try {
+            contentResolver.getType(uri)
+        } catch (_: Exception) {
+            null
+        }
+
+        if (typeToTest != null &&
+            !typeToTest.equals("application/octet-stream", ignoreCase = true) &&
+            !typeToTest.equals("*/*", ignoreCase = true)
+        ) {
+            val lower = typeToTest.lowercase(Locale.ROOT)
+            if (lower.startsWith("audio/")) return MediaType.AUDIO
+            if (lower.startsWith("video/")) return MediaType.VIDEO
+            if (lower == "application/ogg" || lower == "application/x-ogg") return MediaType.AUDIO
+        }
+
+        val candidate = displayName ?: uri.lastPathSegment ?: uri.path ?: ""
+        val ext = candidate.substringAfterLast('.', "").lowercase(Locale.ROOT)
+        if (ext.isNotEmpty()) {
+            val audioExts = setOf(
+                "mp3", "wav", "flac", "m4a", "aac", "ogg", "oga", "opus",
+                "wma", "alac", "aiff", "mid", "midi"
+            )
+            val videoExts = setOf(
+                "mp4", "mkv", "webm", "avi", "mov", "3gp", "ts", "m4v",
+                "flv", "wmv", "vob", "ogv"
+            )
+            if (ext in audioExts) return MediaType.AUDIO
+            if (ext in videoExts) return MediaType.VIDEO
+        }
+
+        return null
+    }
+
+    private fun handleAudioView(uri: Uri, displayName: String?, size: Long) {
+        lifecycleScope.launch {
+            videoPlayerViewModel.releasePlayer()
+            videoLibraryViewModel.closePlayer()
+
+            selectedTabState.value = MainNavigationTab.MUSIC
+
+            val matchedTrack = musicViewModel.findMatchingTrack(uri, displayName, size)
+            val trackToPlay = matchedTrack ?: musicViewModel.parseTrackFromUri(uri, displayName)
+
+            musicViewModel.playIncomingTrack(trackToPlay)
+        }
+    }
+
+    private fun handleVideoView(uri: Uri, displayName: String?, size: Long) {
+        lifecycleScope.launch {
+            if (musicViewModel.playerManager.isPlaying.value) {
+                musicViewModel.playerManager.pause()
+            }
+            musicViewModel.setNowPlayingExpanded(false)
+
+            selectedTabState.value = MainNavigationTab.VIDEO
+
+            val matchedVideo = videoLibraryViewModel.findMatchingVideo(uri, displayName, size)
+            val videoToPlay = matchedVideo ?: videoLibraryViewModel.parseVideoFromUri(uri, displayName, size)
+
+            videoLibraryViewModel.playVideo(videoToPlay)
         }
     }
 }
@@ -129,7 +327,10 @@ fun MainAppContainer(
     musicViewModel: MusicViewModel,
     videoLibraryViewModel: VideoLibraryViewModel,
     videoPlayerViewModel: VideoPlayerViewModel,
-    settingsViewModel: SettingsViewModel
+    settingsViewModel: SettingsViewModel,
+    selectedTab: MainNavigationTab = MainNavigationTab.MUSIC,
+    onTabSelected: (MainNavigationTab) -> Unit = {},
+    isPermissionBypassed: Boolean = false
 ) {
     val nc = LocalNeumorphicColors.current
     val context = LocalContext.current
@@ -167,7 +368,7 @@ fun MainAppContainer(
         }
     }
 
-    if (!permissionsGranted) {
+    if (!permissionsGranted && !isPermissionBypassed) {
         PermissionView(
             onRequestPermission = {
                 permissionLauncher.launch(requiredPermissions)
@@ -176,7 +377,10 @@ fun MainAppContainer(
         return
     }
 
-    var currentTab by rememberSaveable { mutableStateOf(MainNavigationTab.MUSIC) }
+    var currentTab by rememberSaveable { mutableStateOf(selectedTab) }
+    LaunchedEffect(selectedTab) {
+        currentTab = selectedTab
+    }
 
     val musicUiState by musicViewModel.uiState.collectAsState()
     val videoLibUiState by videoLibraryViewModel.uiState.collectAsState()
@@ -213,7 +417,10 @@ fun MainAppContainer(
                 val showMiniPlayerTrack = if (!musicUiState.isNowPlayingExpanded) currentPlayingTrack else null
                 UnifiedDockedBottomBar(
                     selectedTab = currentTab,
-                    onTabSelected = { currentTab = it },
+                    onTabSelected = {
+                        currentTab = it
+                        onTabSelected(it)
+                    },
                     currentTrack = showMiniPlayerTrack,
                     isPlaying = isMusicPlaying,
                     currentPositionMs = musicPositionMs,

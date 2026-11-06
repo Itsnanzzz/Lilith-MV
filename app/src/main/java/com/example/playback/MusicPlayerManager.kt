@@ -1,6 +1,7 @@
 package com.example.playback
 
 import android.content.ComponentName
+import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
 import androidx.annotation.OptIn
@@ -82,6 +83,12 @@ class MusicPlayerManager(private val context: Context) {
     )
     private var pendingRestore: PendingRestore? = null
 
+    private data class PendingPlay(
+        val tracks: List<AudioTrack>,
+        val startIndex: Int
+    )
+    private var pendingPlay: PendingPlay? = null
+
     init {
         initializeController()
     }
@@ -97,11 +104,18 @@ class MusicPlayerManager(private val context: Context) {
                 mediaController = controllerFuture?.get()
                 setupPlayerListener()
                 startProgressPolling()
-                pendingRestore?.let { pr ->
-                    mediaController?.let { ctrl ->
-                        applyRestoredSessionToController(ctrl, pr.queue, pr.startIndex, pr.startPositionMs, pr.repeatMode, pr.shuffleEnabled)
-                    }
+                val pp = pendingPlay
+                if (pp != null) {
+                    pendingPlay = null
                     pendingRestore = null
+                    playTrackList(pp.tracks, pp.startIndex)
+                } else {
+                    pendingRestore?.let { pr ->
+                        mediaController?.let { ctrl ->
+                            applyRestoredSessionToController(ctrl, pr.queue, pr.startIndex, pr.startPositionMs, pr.repeatMode, pr.shuffleEnabled)
+                        }
+                        pendingRestore = null
+                    }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -176,12 +190,39 @@ class MusicPlayerManager(private val context: Context) {
         controller.playWhenReady = false // NEVER auto-play
     }
 
+    private fun canPersistTrack(track: AudioTrack): Boolean {
+        val uri = try {
+            Uri.parse(track.uri)
+        } catch (_: Exception) {
+            return false
+        }
+        if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
+            if (uri.authority == "media") {
+                return true
+            }
+            return try {
+                context.contentResolver.persistedUriPermissions.any {
+                    it.uri == uri && it.isReadPermission
+                }
+            } catch (_: Exception) {
+                false
+            }
+        }
+        return true
+    }
+
     fun saveSessionNow() {
         val track = _currentTrack.value ?: return
         val queueTracks = _queue.value
         if (queueTracks.isEmpty()) return
 
-        val queueIndex = queueTracks.indexOfFirst { it.uri == track.uri }.coerceAtLeast(0)
+        // Do not save non-persisted content URIs from external apps into snapshot
+        if (!canPersistTrack(track)) return
+
+        val validQueueTracks = queueTracks.filter { canPersistTrack(it) }
+        if (validQueueTracks.isEmpty() || !validQueueTracks.any { it.uri == track.uri }) return
+
+        val queueIndex = validQueueTracks.indexOfFirst { it.uri == track.uri }.coerceAtLeast(0)
         val position = _currentPositionMs.value
         val duration = if (_durationMs.value > 0L) _durationMs.value else track.durationMs
         val repeat = _repeatMode.value
@@ -195,7 +236,7 @@ class MusicPlayerManager(private val context: Context) {
             albumArtUri = track.albumArtUri,
             durationMs = duration,
             positionMs = position,
-            queueUris = queueTracks.map { it.uri },
+            queueUris = validQueueTracks.map { it.uri },
             queueIndex = queueIndex,
             repeatMode = repeat,
             shuffleEnabled = shuffle
@@ -233,6 +274,17 @@ class MusicPlayerManager(private val context: Context) {
             matchedIndex = snapshot.queueIndex.coerceIn(0, validQueue.size - 1)
         }
         val targetTrack = validQueue[matchedIndex]
+
+        // Validate target track can be read gracefully
+        try {
+            val parsed = Uri.parse(targetTrack.uri)
+            if (parsed.scheme == ContentResolver.SCHEME_CONTENT) {
+                context.contentResolver.openFileDescriptor(parsed, "r")?.close()
+            }
+        } catch (_: Exception) {
+            clearSavedSession()
+            return
+        }
 
         val duration = if (snapshot.durationMs > 0L) snapshot.durationMs else targetTrack.durationMs
         var position = snapshot.positionMs.coerceIn(0L, duration)
@@ -312,10 +364,18 @@ class MusicPlayerManager(private val context: Context) {
     }
 
     fun playTrackList(tracks: List<AudioTrack>, startIndex: Int = 0) {
-        val controller = mediaController ?: return
         if (tracks.isEmpty()) return
 
         _queue.value = tracks
+        _currentTrack.value = tracks.getOrNull(startIndex)
+        _formatInfo.value = AudioFormatDetector.detectFromMime(_currentTrack.value?.mimeType)
+
+        val controller = mediaController
+        if (controller == null) {
+            pendingPlay = PendingPlay(tracks, startIndex)
+            return
+        }
+
         val mediaItems = tracks.map { track ->
             val metadata = MediaMetadata.Builder()
                 .setTitle(track.title)
@@ -335,8 +395,6 @@ class MusicPlayerManager(private val context: Context) {
         controller.prepare()
         controller.play()
 
-        _currentTrack.value = tracks.getOrNull(startIndex)
-        _formatInfo.value = AudioFormatDetector.detectFromMime(_currentTrack.value?.mimeType)
         saveSessionNow()
     }
 
@@ -427,6 +485,13 @@ class MusicPlayerManager(private val context: Context) {
         _queue.value = emptyList()
         _currentTrack.value = null
         clearSavedSession()
+    }
+
+    fun pause() {
+        val controller = mediaController ?: return
+        if (controller.isPlaying) {
+            controller.pause()
+        }
     }
 
     fun togglePlayPause() {

@@ -1,6 +1,8 @@
 package com.example.ui.music
 
 import android.app.Application
+import android.content.ContentResolver
+import android.content.ContentUris
 import android.content.IntentSender
 import android.net.Uri
 import android.os.Build
@@ -28,6 +30,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.File
 
 enum class MusicTab {
     SONGS, ALBUMS, FOLDERS, PLAYLISTS
@@ -178,15 +181,49 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     fun openSafTrack(uri: Uri) {
         viewModelScope.launch {
             val track = repository.parseTrackFromUri(uri)
-            if (track != null) {
-                val updatedTracks = listOf(track) + _uiState.value.allTracks
-                _uiState.value = _uiState.value.copy(
-                    allTracks = updatedTracks,
-                    filteredTracks = filterTracks(updatedTracks, _uiState.value.searchQuery)
-                )
-                playerManager.playTrackList(listOf(track), 0)
+            val updatedTracks = listOf(track) + _uiState.value.allTracks
+            _uiState.value = _uiState.value.copy(
+                allTracks = updatedTracks,
+                filteredTracks = filterTracks(updatedTracks, _uiState.value.searchQuery)
+            )
+            playerManager.playTrackList(listOf(track), 0)
+        }
+    }
+
+    suspend fun findMatchingTrack(uri: Uri, displayName: String?, size: Long): AudioTrack? {
+        val cached = _uiState.value.allTracks
+        if (cached.isNotEmpty()) {
+            val uriStr = uri.toString()
+            cached.find { it.uri == uriStr }?.let { return it }
+            val uriId = try {
+                if (uri.scheme == ContentResolver.SCHEME_CONTENT && uri.authority == "media") {
+                    ContentUris.parseId(uri)
+                } else null
+            } catch (_: Exception) { null }
+            if (uriId != null) {
+                cached.find { it.id == uriId }?.let { return it }
+            }
+            if (!displayName.isNullOrBlank()) {
+                val nameWithoutExt = displayName.substringBeforeLast('.')
+                cached.find { t ->
+                    val matchName = t.title.equals(displayName, ignoreCase = true) ||
+                            t.title.equals(nameWithoutExt, ignoreCase = true) ||
+                            (t.path.isNotEmpty() && File(t.path).name.equals(displayName, ignoreCase = true))
+                    val matchSize = size <= 0L || (t.path.isNotEmpty() && File(t.path).length() == size)
+                    matchName && matchSize
+                }?.let { return it }
             }
         }
+        return repository.findMatchingTrack(uri, displayName, size)
+    }
+
+    suspend fun parseTrackFromUri(uri: Uri, displayName: String?): AudioTrack {
+        return repository.parseTrackFromUri(uri, displayName)
+    }
+
+    fun playIncomingTrack(track: AudioTrack) {
+        playerManager.playTrackList(listOf(track), 0)
+        setNowPlayingExpanded(true)
     }
 
     fun createPlaylist(name: String) {

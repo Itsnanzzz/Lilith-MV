@@ -1,6 +1,8 @@
 package com.example.ui.video
 
 import android.app.Application
+import android.content.ContentResolver
+import android.content.ContentUris
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -85,6 +87,37 @@ class VideoLibraryViewModel(application: Application) : AndroidViewModel(applica
 
     fun playVideo(video: VideoItem) {
         _uiState.value = _uiState.value.copy(activePlayingVideo = video)
+    }
+
+    suspend fun findMatchingVideo(uri: Uri, displayName: String?, size: Long): VideoItem? {
+        val cached = _uiState.value.allVideos
+        if (cached.isNotEmpty()) {
+            val uriStr = uri.toString()
+            cached.find { it.uri == uriStr }?.let { return it }
+            val uriId = try {
+                if (uri.scheme == ContentResolver.SCHEME_CONTENT && uri.authority == "media") {
+                    ContentUris.parseId(uri)
+                } else null
+            } catch (_: Exception) { null }
+            if (uriId != null) {
+                cached.find { it.id == uriId }?.let { return it }
+            }
+            if (!displayName.isNullOrBlank()) {
+                val nameWithoutExt = displayName.substringBeforeLast('.')
+                cached.find { v ->
+                    val matchName = v.title.equals(displayName, ignoreCase = true) ||
+                            v.title.equals(nameWithoutExt, ignoreCase = true) ||
+                            (v.path.isNotEmpty() && File(v.path).name.equals(displayName, ignoreCase = true))
+                    val matchSize = size <= 0L || v.size == size || (v.path.isNotEmpty() && File(v.path).length() == size)
+                    matchName && matchSize
+                }?.let { return it }
+            }
+        }
+        return repository.findMatchingVideo(uri, displayName, size)
+    }
+
+    suspend fun parseVideoFromUri(uri: Uri, displayName: String?, size: Long): VideoItem {
+        return repository.parseVideoFromUri(uri, displayName, size)
     }
 
     fun closePlayer() {
