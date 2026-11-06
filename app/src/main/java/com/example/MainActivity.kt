@@ -63,6 +63,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.example.data.ForegroundMediaObserver
+import com.example.data.MediaRepository
 import com.example.data.ThemeMode
 import com.example.data.AppAccent
 import com.example.ui.common.PermissionView
@@ -103,9 +105,28 @@ class MainActivity : AppCompatActivity() {
     private val selectedTabState = mutableStateOf(MainNavigationTab.MUSIC)
     private val isPermissionBypassedState = mutableStateOf(false)
     private var isIntentHandled = false
+    private lateinit var foregroundMediaObserver: ForegroundMediaObserver
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        foregroundMediaObserver = ForegroundMediaObserver(
+            context = applicationContext,
+            repository = MediaRepository(applicationContext),
+            getKnownAudioPaths = {
+                musicViewModel.uiState.value.allTracks.mapNotNullTo(HashSet()) {
+                    it.path.takeIf { p -> p.isNotEmpty() }
+                }
+            },
+            getKnownVideoPaths = {
+                videoLibraryViewModel.uiState.value.allVideos.mapNotNullTo(HashSet()) {
+                    it.path.takeIf { p -> p.isNotEmpty() }
+                }
+            },
+            onAudioMediaChanged = { musicViewModel.syncMediaLibraryInBackground() },
+            onVideoMediaChanged = { videoLibraryViewModel.syncVideosInBackground() }
+        )
+        lifecycle.addObserver(foregroundMediaObserver)
 
         if (savedInstanceState != null) {
             isIntentHandled = savedInstanceState.getBoolean(KEY_INTENT_HANDLED, false)
@@ -351,19 +372,22 @@ fun MainAppContainer(
 
     var permissionsGranted by remember {
         mutableStateOf(
-            requiredPermissions.all {
-                ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
-            }
+            ForegroundMediaObserver.hasAudioReadPermission(context) &&
+                ForegroundMediaObserver.hasVideoReadPermission(context)
         )
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
-        val granted = results.values.all { it }
+        val hasAudio = ForegroundMediaObserver.hasAudioReadPermission(context)
+        val hasVideo = ForegroundMediaObserver.hasVideoReadPermission(context)
+        val granted = results.values.all { it } || (hasAudio && hasVideo)
         permissionsGranted = granted
-        if (granted) {
+        if (hasAudio) {
             musicViewModel.scanMediaLibrary()
+        }
+        if (hasVideo) {
             videoLibraryViewModel.scanVideos()
         }
     }

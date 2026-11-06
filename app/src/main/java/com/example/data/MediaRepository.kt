@@ -7,6 +7,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.IntentSender
 import android.content.pm.PackageManager
+import android.database.ContentObserver
 import android.database.Cursor
 import android.media.MediaExtractor
 import android.media.MediaFormat
@@ -14,6 +15,9 @@ import android.media.MediaMetadataRetriever
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
@@ -29,9 +33,17 @@ import com.example.data.model.VideoExtraInfo
 import com.example.data.model.VideoItem
 import com.example.playback.AudioFormatDetector
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.resume
 
 sealed class DeleteMediaResult {
     object Success : DeleteMediaResult()
@@ -55,12 +67,252 @@ sealed class DeleteTrackResult {
     data class Error(val message: String) : DeleteTrackResult()
 }
 
+data class MediaStoreSignature(
+    val count: Int,
+    val maxId: Long,
+    val maxDateModified: Long,
+    val checksum: Long
+)
+
 class MediaRepository(private val context: Context) {
 
     private val contentResolver: ContentResolver = context.contentResolver
+    private val scannedFileTimestamps = ConcurrentHashMap<String, Long>()
 
-    suspend fun getAudioTracks(): List<AudioTrack> = withContext(Dispatchers.IO) {
-        val tracks = mutableListOf<AudioTrack>()
+    fun observeAudioStoreChanges(): Flow<Unit> = callbackFlow {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                trySend(Unit)
+            }
+
+            override fun onChange(selfChange: Boolean, uri: Uri?) {
+                trySend(Unit)
+            }
+        }
+        try {
+            contentResolver.registerContentObserver(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                true,
+                observer
+            )
+        } catch (_: Exception) {
+        }
+        awaitClose {
+            try {
+                contentResolver.unregisterContentObserver(observer)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    fun observeVideoStoreChanges(): Flow<Unit> = callbackFlow {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                trySend(Unit)
+            }
+
+            override fun onChange(selfChange: Boolean, uri: Uri?) {
+                trySend(Unit)
+            }
+        }
+        try {
+            contentResolver.registerContentObserver(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                true,
+                observer
+            )
+        } catch (_: Exception) {
+        }
+        awaitClose {
+            try {
+                contentResolver.unregisterContentObserver(observer)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    suspend fun getAudioStoreSignature(): MediaStoreSignature? = withContext(Dispatchers.IO) {
+        val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        val projection = arrayOf(
+            MediaStore.Audio.Media._ID,
+            MediaStore.Audio.Media.DATE_MODIFIED
+        )
+        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.DURATION} >= 5000"
+        try {
+            contentResolver.query(uri, projection, selection, null, null)?.use { cursor ->
+                val idCol = cursor.getColumnIndex(MediaStore.Audio.Media._ID)
+                val modCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATE_MODIFIED)
+                var count = 0
+                var maxId = 0L
+                var maxModified = 0L
+                var checksum = 0L
+                while (cursor.moveToNext()) {
+                    val id = if (idCol >= 0 && !cursor.isNull(idCol)) cursor.getLong(idCol) else 0L
+                    val modified = if (modCol >= 0 && !cursor.isNull(modCol)) cursor.getLong(modCol) else 0L
+                    count++
+                    if (id > maxId) maxId = id
+                    if (modified > maxModified) maxModified = modified
+                    checksum = checksum * 31L + id + modified
+                }
+                MediaStoreSignature(
+                    count = count,
+                    maxId = maxId,
+                    maxDateModified = maxModified,
+                    checksum = checksum
+                )
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    suspend fun getVideoStoreSignature(): MediaStoreSignature? = withContext(Dispatchers.IO) {
+        val uri = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        val projection = arrayOf(
+            MediaStore.Video.Media._ID,
+            MediaStore.Video.Media.DATE_MODIFIED
+        )
+        try {
+            contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                val idCol = cursor.getColumnIndex(MediaStore.Video.Media._ID)
+                val modCol = cursor.getColumnIndex(MediaStore.Video.Media.DATE_MODIFIED)
+                var count = 0
+                var maxId = 0L
+                var maxModified = 0L
+                var checksum = 0L
+                while (cursor.moveToNext()) {
+                    val id = if (idCol >= 0 && !cursor.isNull(idCol)) cursor.getLong(idCol) else 0L
+                    val modified = if (modCol >= 0 && !cursor.isNull(modCol)) cursor.getLong(modCol) else 0L
+                    count++
+                    if (id > maxId) maxId = id
+                    if (modified > maxModified) maxModified = modified
+                    checksum = checksum * 31L + id + modified
+                }
+                MediaStoreSignature(
+                    count = count,
+                    maxId = maxId,
+                    maxDateModified = maxModified,
+                    checksum = checksum
+                )
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    suspend fun scanUnindexedPublicMedia(
+        scanAudio: Boolean,
+        scanVideo: Boolean,
+        knownAudioPaths: Set<String>,
+        knownVideoPaths: Set<String>
+    ) = withContext(Dispatchers.IO) {
+        if (!scanAudio && !scanVideo) return@withContext
+        val storageState = try {
+            Environment.getExternalStorageState()
+        } catch (_: Exception) {
+            return@withContext
+        }
+        if (storageState != Environment.MEDIA_MOUNTED && storageState != Environment.MEDIA_MOUNTED_READ_ONLY) {
+            return@withContext
+        }
+        @Suppress("DEPRECATION")
+        val rootDir = try {
+            Environment.getExternalStorageDirectory()
+        } catch (_: Exception) {
+            null
+        } ?: return@withContext
+        if (!rootDir.exists() || !rootDir.isDirectory) return@withContext
+
+        val audioExts = setOf("mp3", "wav", "flac", "m4a", "aac", "ogg", "oga", "opus", "wma", "alac", "aiff")
+        val videoExts = setOf("mp4", "mkv", "webm", "avi", "mov", "3gp", "ts", "m4v", "flv", "wmv")
+        val publicFolderNames = listOf(
+            Environment.DIRECTORY_MUSIC,
+            Environment.DIRECTORY_MOVIES,
+            Environment.DIRECTORY_DOWNLOADS,
+            Environment.DIRECTORY_DCIM,
+            Environment.DIRECTORY_PODCASTS,
+            Environment.DIRECTORY_AUDIOBOOKS,
+            "Recordings"
+        )
+
+        val pathsToScan = mutableListOf<String>()
+
+        fun inspectDirectory(dir: File, depth: Int) {
+            if (depth > 3 || pathsToScan.size >= 50) return
+            val children = try {
+                dir.listFiles()
+            } catch (_: Exception) {
+                null
+            } ?: return
+            if (children.any { it.name == ".nomedia" }) return
+
+            for (child in children) {
+                if (pathsToScan.size >= 50) break
+                val name = child.name
+                if (name.startsWith(".")) continue
+                if (child.isDirectory) {
+                    inspectDirectory(child, depth + 1)
+                } else if (child.isFile) {
+                    val length = try { child.length() } catch (_: Exception) { 0L }
+                    if (length <= 0L) continue
+                    val ext = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
+                    if (ext.isEmpty()) continue
+                    val isMatchingAudio = scanAudio && ext in audioExts
+                    val isMatchingVideo = scanVideo && ext in videoExts
+                    if (!isMatchingAudio && !isMatchingVideo) continue
+
+                    val absPath = child.absolutePath
+                    val alreadyKnown = (isMatchingAudio && absPath in knownAudioPaths) ||
+                        (isMatchingVideo && absPath in knownVideoPaths)
+                    if (!alreadyKnown) {
+                        val lastMod = try { child.lastModified() } catch (_: Exception) { 0L }
+                        if (scannedFileTimestamps[absPath] != lastMod) {
+                            if (scannedFileTimestamps.size > 1000) {
+                                scannedFileTimestamps.clear()
+                            }
+                            scannedFileTimestamps[absPath] = lastMod
+                            pathsToScan.add(absPath)
+                        }
+                    }
+                }
+            }
+        }
+
+        for (folderName in publicFolderNames) {
+            if (pathsToScan.size >= 50) break
+            val dir = File(rootDir, folderName)
+            if (dir.exists() && dir.isDirectory) {
+                inspectDirectory(dir, 0)
+            }
+        }
+
+        if (pathsToScan.isNotEmpty()) {
+            withTimeoutOrNull(2_500L) {
+                suspendCancellableCoroutine<Unit> { continuation ->
+                    val remaining = AtomicInteger(pathsToScan.size)
+                    try {
+                        MediaScannerConnection.scanFile(
+                            context,
+                            pathsToScan.toTypedArray(),
+                            null
+                        ) { _, _ ->
+                            if (remaining.decrementAndGet() <= 0 && continuation.isActive) {
+                                continuation.resume(Unit)
+                            }
+                        }
+                    } catch (_: Exception) {
+                        if (continuation.isActive) {
+                            continuation.resume(Unit)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    suspend fun getAudioTracks(): List<AudioTrack> = queryAudioTracksOrNull() ?: emptyList()
+
+    suspend fun queryAudioTracksOrNull(): List<AudioTrack>? = withContext(Dispatchers.IO) {
         val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         val projectionList = mutableListOf(
             MediaStore.Audio.Media._ID,
@@ -86,6 +338,7 @@ class MediaRepository(private val context: Context) {
 
         try {
             contentResolver.query(uri, projection, selection, null, sortOrder)?.use { cursor ->
+                val tracks = mutableListOf<AudioTrack>()
                 val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
                 val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
                 val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
@@ -148,15 +401,17 @@ class MediaRepository(private val context: Context) {
                         )
                     )
                 }
+                tracks
             }
         } catch (e: Exception) {
             e.printStackTrace()
+            null
         }
-        tracks
     }
 
-    suspend fun getVideos(): List<VideoItem> = withContext(Dispatchers.IO) {
-        val videos = mutableListOf<VideoItem>()
+    suspend fun getVideos(): List<VideoItem> = queryVideosOrNull() ?: emptyList()
+
+    suspend fun queryVideosOrNull(): List<VideoItem>? = withContext(Dispatchers.IO) {
         val uri = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
         val projectionList = mutableListOf(
             MediaStore.Video.Media._ID,
@@ -179,6 +434,7 @@ class MediaRepository(private val context: Context) {
 
         try {
             contentResolver.query(uri, projection, null, null, sortOrder)?.use { cursor ->
+                val videos = mutableListOf<VideoItem>()
                 val idCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
                 val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.TITLE)
                 val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
@@ -237,11 +493,12 @@ class MediaRepository(private val context: Context) {
                         )
                     )
                 }
+                videos
             }
         } catch (e: Exception) {
             e.printStackTrace()
+            null
         }
-        videos
     }
 
     suspend fun parseTrackFromUri(uri: Uri, displayName: String? = null, size: Long = 0L): AudioTrack = withContext(Dispatchers.IO) {

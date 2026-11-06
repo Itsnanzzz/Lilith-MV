@@ -2,12 +2,23 @@ package com.example
 
 import android.Manifest
 import android.content.ComponentName
+import android.content.ContentProvider
+import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ProviderInfo
+import android.database.Cursor
+import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import android.os.Build
+import android.os.Looper
+import android.provider.MediaStore
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -24,6 +35,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 import com.example.data.AppAccent
+import com.example.data.ForegroundMediaObserver
 import com.example.data.MediaRepository
 import com.example.data.RenameMediaResult
 import com.example.data.db.PlaylistEntity
@@ -64,6 +76,7 @@ import com.example.ui.theme.LightAccentTeal
 import com.example.ui.theme.LightAccentTealText
 import com.example.ui.theme.LightAccentViolet
 import com.example.ui.theme.LilithTheme
+import com.example.ui.video.VideoLibraryViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -81,7 +94,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowContentResolver
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "en-rUS")
@@ -679,6 +694,314 @@ class ExampleRobolectricTest {
             assertEquals(DarkAccentDefault, observedAppAccent)
             assertEquals(DarkAccentDefault, observedForegroundAccent)
             assertEquals(DarkAccentDefault, observedMaterialPrimary)
+        }
+    }
+
+    private fun registerFakeMediaProvider() {
+        val provider = FakeMediaContentProvider().apply {
+            attachInfo(app, ProviderInfo().apply { authority = MediaStore.AUTHORITY })
+        }
+        ShadowContentResolver.registerProviderInternal(MediaStore.AUTHORITY, provider)
+    }
+
+    private fun insertAudioIntoMediaStore(id: Long, title: String, path: String): Uri {
+        val values = ContentValues().apply {
+            put(MediaStore.Audio.Media._ID, id)
+            put(MediaStore.Audio.Media.TITLE, title)
+            put(MediaStore.Audio.Media.ARTIST, "Test Artist")
+            put(MediaStore.Audio.Media.ALBUM, "Test Album")
+            put(MediaStore.Audio.Media.ALBUM_ID, 10L)
+            put(MediaStore.Audio.Media.DURATION, 180_000L)
+            put(MediaStore.Audio.Media.DATA, path)
+            put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg")
+            put(MediaStore.Audio.Media.SIZE, 4_200_000L)
+            put(MediaStore.Audio.Media.DISPLAY_NAME, "$title.mp3")
+            put(MediaStore.Audio.Media.IS_MUSIC, 1)
+            put(MediaStore.Audio.Media.DATE_ADDED, 1_700_000_000L + id)
+            put(MediaStore.Audio.Media.DATE_MODIFIED, 1_700_000_000L + id)
+            put(MediaStore.Audio.Media.RELATIVE_PATH, "Music/")
+        }
+        val uri = app.contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
+            ?: ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
+        app.contentResolver.notifyChange(uri, null)
+        return uri
+    }
+
+    private fun insertVideoIntoMediaStore(id: Long, title: String, path: String): Uri {
+        val values = ContentValues().apply {
+            put(MediaStore.Video.Media._ID, id)
+            put(MediaStore.Video.Media.TITLE, title)
+            put(MediaStore.Video.Media.DURATION, 90_000L)
+            put(MediaStore.Video.Media.WIDTH, 1920)
+            put(MediaStore.Video.Media.HEIGHT, 1080)
+            put(MediaStore.Video.Media.SIZE, 12_000_000L)
+            put(MediaStore.Video.Media.DATE_ADDED, 1_700_000_000L + id)
+            put(MediaStore.Video.Media.DATE_MODIFIED, 1_700_000_000L + id)
+            put(MediaStore.Video.Media.DATA, path)
+            put(MediaStore.Video.Media.DISPLAY_NAME, "$title.mp4")
+            put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+            put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/")
+        }
+        val uri = app.contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+            ?: ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
+        app.contentResolver.notifyChange(uri, null)
+        return uri
+    }
+
+    private fun waitUntil(timeoutMs: Long = 5_000L, condition: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (!condition() && System.currentTimeMillis() < deadline) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(20)
+        }
+        Shadows.shadowOf(Looper.getMainLooper()).idle()
+        assertTrue("Timed out waiting for condition", condition())
+    }
+
+    @Test
+    fun `foreground media observer runs only while lifecycle is started and unregisters on stop`() {
+        grantMediaPermissions()
+        val audioChecks = AtomicInteger(0)
+        val videoChecks = AtomicInteger(0)
+
+        val owner = object : LifecycleOwner {
+            val registry = LifecycleRegistry.createUnsafe(this)
+            override val lifecycle: Lifecycle get() = registry
+        }
+        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
+
+        val observer = ForegroundMediaObserver(
+            context = app,
+            repository = MediaRepository(app),
+            getKnownAudioPaths = { emptySet() },
+            getKnownVideoPaths = { emptySet() },
+            onAudioMediaChanged = { audioChecks.incrementAndGet() },
+            onVideoMediaChanged = { videoChecks.incrementAndGet() },
+            pollIntervalMs = 10_000L,
+            debounceMs = 20L
+        )
+        owner.lifecycle.addObserver(observer)
+
+        val shadowResolver = Shadows.shadowOf(app.contentResolver)
+        assertFalse(observer.isObserving.value)
+        assertTrue(shadowResolver.getContentObservers(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI).isEmpty())
+        assertTrue(shadowResolver.getContentObservers(MediaStore.Video.Media.EXTERNAL_CONTENT_URI).isEmpty())
+
+        // Opening app (ON_START) registers observers
+        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+        assertTrue(observer.isObserving.value)
+        waitUntil {
+            shadowResolver.getContentObservers(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI).size == 1 &&
+                shadowResolver.getContentObservers(MediaStore.Video.Media.EXTERNAL_CONTENT_URI).size == 1
+        }
+
+        // Closing/backgrounding app (ON_STOP) unregisters observers and halts detection
+        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
+        assertFalse(observer.isObserving.value)
+        waitUntil {
+            shadowResolver.getContentObservers(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI).isEmpty() &&
+                shadowResolver.getContentObservers(MediaStore.Video.Media.EXTERNAL_CONTENT_URI).isEmpty()
+        }
+
+        val audioBeforeStop = audioChecks.get()
+        val videoBeforeStop = videoChecks.get()
+        app.contentResolver.notifyChange(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, null)
+        app.contentResolver.notifyChange(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, null)
+        Shadows.shadowOf(Looper.getMainLooper()).idle()
+        Thread.sleep(60)
+        assertEquals(audioBeforeStop, audioChecks.get())
+        assertEquals(videoBeforeStop, videoChecks.get())
+
+        // Reopening app (ON_START) re-registers observers and triggers catch-up check
+        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+        assertTrue(observer.isObserving.value)
+        waitUntil {
+            shadowResolver.getContentObservers(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI).size == 1 &&
+                shadowResolver.getContentObservers(MediaStore.Video.Media.EXTERNAL_CONTENT_URI).size == 1 &&
+                audioChecks.get() > audioBeforeStop &&
+                videoChecks.get() > videoBeforeStop
+        }
+
+        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+        assertFalse(observer.isObserving.value)
+        waitUntil {
+            shadowResolver.getContentObservers(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI).isEmpty() &&
+                shadowResolver.getContentObservers(MediaStore.Video.Media.EXTERNAL_CONTENT_URI).isEmpty()
+        }
+    }
+
+    @Test
+    fun `background media observer automatically detects newly added music and video only while app is open`() {
+        grantMediaPermissions()
+        registerFakeMediaProvider()
+        insertAudioIntoMediaStore(1L, "Initial Song", "/storage/emulated/0/Music/Initial Song.mp3")
+        insertVideoIntoMediaStore(1L, "Initial Video", "/storage/emulated/0/Movies/Initial Video.mp4")
+
+        val musicViewModel = MusicViewModel(app)
+        val videoViewModel = VideoLibraryViewModel(app)
+
+        waitUntil {
+            !musicViewModel.uiState.value.isScanning &&
+                musicViewModel.uiState.value.allTracks.size == 1 &&
+                !videoViewModel.uiState.value.isScanning &&
+                videoViewModel.uiState.value.allVideos.size == 1
+        }
+
+        val owner = object : LifecycleOwner {
+            val registry = LifecycleRegistry.createUnsafe(this)
+            override val lifecycle: Lifecycle get() = registry
+        }
+        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
+
+        val observer = ForegroundMediaObserver(
+            context = app,
+            repository = MediaRepository(app),
+            getKnownAudioPaths = {
+                musicViewModel.uiState.value.allTracks.mapNotNullTo(HashSet()) { it.path.ifEmpty { null } }
+            },
+            getKnownVideoPaths = {
+                videoViewModel.uiState.value.allVideos.mapNotNullTo(HashSet()) { it.path.ifEmpty { null } }
+            },
+            onAudioMediaChanged = { musicViewModel.syncMediaLibraryInBackground() },
+            onVideoMediaChanged = { videoViewModel.syncVideosInBackground() },
+            pollIntervalMs = 10_000L,
+            debounceMs = 30L
+        )
+        owner.lifecycle.addObserver(observer)
+        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+
+        val shadowResolver = Shadows.shadowOf(app.contentResolver)
+        waitUntil {
+            shadowResolver.getContentObservers(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI).size == 1 &&
+                shadowResolver.getContentObservers(MediaStore.Video.Media.EXTERNAL_CONTENT_URI).size == 1
+        }
+
+        // Add new song and new video while app is open (without pressing refresh)
+        insertAudioIntoMediaStore(2L, "Detected Song", "/storage/emulated/0/Music/Detected Song.mp3")
+        insertVideoIntoMediaStore(2L, "Detected Video", "/storage/emulated/0/Movies/Detected Video.mp4")
+
+        waitUntil {
+            musicViewModel.uiState.value.allTracks.any { it.title == "Detected Song" } &&
+                videoViewModel.uiState.value.allVideos.any { it.title == "Detected Video" }
+        }
+        assertEquals(2, musicViewModel.uiState.value.allTracks.size)
+        assertEquals(2, videoViewModel.uiState.value.allVideos.size)
+        assertFalse(musicViewModel.uiState.value.isScanning)
+        assertFalse(videoViewModel.uiState.value.isScanning)
+
+        // Close/background app (ON_STOP) and add more media -> should NOT update while closed
+        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
+        waitUntil {
+            shadowResolver.getContentObservers(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI).isEmpty() &&
+                shadowResolver.getContentObservers(MediaStore.Video.Media.EXTERNAL_CONTENT_URI).isEmpty()
+        }
+        insertAudioIntoMediaStore(3L, "Background Song", "/storage/emulated/0/Music/Background Song.mp3")
+        insertVideoIntoMediaStore(3L, "Background Video", "/storage/emulated/0/Movies/Background Video.mp4")
+        Shadows.shadowOf(Looper.getMainLooper()).idle()
+        Thread.sleep(80)
+        assertEquals(2, musicViewModel.uiState.value.allTracks.size)
+        assertEquals(2, videoViewModel.uiState.value.allVideos.size)
+
+        // Reopen app (ON_START) -> automatically catches up with media added while closed
+        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+        waitUntil {
+            musicViewModel.uiState.value.allTracks.any { it.title == "Background Song" } &&
+                videoViewModel.uiState.value.allVideos.any { it.title == "Background Video" }
+        }
+        assertEquals(3, musicViewModel.uiState.value.allTracks.size)
+        assertEquals(3, videoViewModel.uiState.value.allVideos.size)
+
+        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+    }
+
+    private class FakeMediaContentProvider : ContentProvider() {
+        private lateinit var db: SQLiteDatabase
+
+        override fun onCreate(): Boolean {
+            db = SQLiteDatabase.create(null).apply {
+                execSQL(
+                    """
+                    CREATE TABLE audio (
+                        _id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        title TEXT,
+                        artist TEXT,
+                        album TEXT,
+                        album_id INTEGER,
+                        duration INTEGER,
+                        _data TEXT,
+                        mime_type TEXT,
+                        _size INTEGER,
+                        _display_name TEXT,
+                        date_added INTEGER,
+                        date_modified INTEGER,
+                        relative_path TEXT,
+                        is_music INTEGER DEFAULT 1
+                    )
+                    """.trimIndent()
+                )
+                execSQL(
+                    """
+                    CREATE TABLE video (
+                        _id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        title TEXT,
+                        duration INTEGER,
+                        width INTEGER,
+                        height INTEGER,
+                        _size INTEGER,
+                        date_modified INTEGER,
+                        _data TEXT,
+                        _display_name TEXT,
+                        mime_type TEXT,
+                        date_added INTEGER,
+                        relative_path TEXT
+                    )
+                    """.trimIndent()
+                )
+            }
+            return true
+        }
+
+        private fun tableFor(uri: Uri): String =
+            if (uri.path?.contains("/audio") == true) "audio" else "video"
+
+        override fun query(
+            uri: Uri,
+            projection: Array<out String>?,
+            selection: String?,
+            selectionArgs: Array<out String>?,
+            sortOrder: String?
+        ): Cursor {
+            val cursor = db.query(tableFor(uri), projection, selection, selectionArgs, null, null, sortOrder)
+            context?.contentResolver?.let { cursor.setNotificationUri(it, uri) }
+            return cursor
+        }
+
+        override fun getType(uri: Uri): String? = null
+
+        override fun insert(uri: Uri, values: ContentValues?): Uri {
+            val rowId = db.insertWithOnConflict(
+                tableFor(uri),
+                null,
+                values ?: ContentValues(),
+                SQLiteDatabase.CONFLICT_REPLACE
+            )
+            return ContentUris.withAppendedId(uri, rowId)
+        }
+
+        override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int =
+            db.delete(tableFor(uri), selection, selectionArgs)
+
+        override fun update(
+            uri: Uri,
+            values: ContentValues?,
+            selection: String?,
+            selectionArgs: Array<out String>?
+        ): Int = db.update(tableFor(uri), values, selection, selectionArgs)
+
+        override fun shutdown() {
+            if (::db.isInitialized && db.isOpen) {
+                db.close()
+            }
         }
     }
 }

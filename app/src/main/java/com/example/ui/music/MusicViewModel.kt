@@ -12,6 +12,7 @@ import com.example.LilithApplication
 import com.example.R
 import com.example.data.DeleteTrackResult
 import com.example.data.MediaRepository
+import com.example.data.MediaStoreSignature
 import com.example.data.RenameMediaResult
 import com.example.data.model.SongExtraInfo
 import com.example.data.db.PlaylistEntity
@@ -33,6 +34,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 
 enum class MusicTab {
@@ -94,6 +97,10 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     private var pendingRename: Pair<AudioTrack, String>? = null
     private var playlistSongsJob: Job? = null
+    private val scanMutex = Mutex()
+    @Volatile
+    private var hasCompletedInitialScan = false
+    private var lastAudioStoreSignature: MediaStoreSignature? = null
 
     val playlists = database.playlistDao().getAllPlaylists()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
@@ -108,26 +115,70 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun scanMediaLibrary() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isScanning = true)
-            val tracks = repository.getAudioTracks()
-            val albums = repository.groupIntoAlbums(tracks)
-            val folders = repository.groupIntoFolders(tracks)
-            val byUri = tracks.associateBy { it.uri }
-            val byId = tracks.associateBy { it.id }
-            val enrichedPlaylistSongs = _uiState.value.playlistSongs.map { song ->
-                byUri[song.uri] ?: byId[song.id] ?: song
+            scanMutex.withLock {
+                _uiState.value = _uiState.value.copy(isScanning = true)
+                val signature = repository.getAudioStoreSignature()
+                val tracks = repository.queryAudioTracksOrNull() ?: emptyList()
+                lastAudioStoreSignature = signature
+                applyTracksToState(tracks, stopScanningIndicator = true)
+                hasCompletedInitialScan = true
+                playerManager.restoreSession(tracks)
             }
-
-            _uiState.value = _uiState.value.copy(
-                allTracks = tracks,
-                filteredTracks = filterTracks(tracks, _uiState.value.searchQuery),
-                albums = albums,
-                folders = folders,
-                playlistSongs = enrichedPlaylistSongs,
-                isScanning = false
-            )
-            playerManager.restoreSession(tracks)
         }
+    }
+
+    suspend fun syncMediaLibraryInBackground(forceCheck: Boolean = false) {
+        if (!hasCompletedInitialScan) return
+        val currentState = _uiState.value
+        if (currentState.isScanning || currentState.isDeletingTrack || currentState.isRenamingTrack) {
+            return
+        }
+        scanMutex.withLock {
+            val latestState = _uiState.value
+            if (latestState.isScanning || latestState.isDeletingTrack || latestState.isRenamingTrack) {
+                return
+            }
+            val newSignature = repository.getAudioStoreSignature() ?: return
+            if (!forceCheck && newSignature == lastAudioStoreSignature) {
+                return
+            }
+            val tracks = repository.queryAudioTracksOrNull() ?: return
+            lastAudioStoreSignature = newSignature
+            if (tracks != latestState.allTracks) {
+                applyTracksToState(tracks, stopScanningIndicator = false)
+                if (playerManager.currentTrack.value == null && playerManager.queue.value.isEmpty()) {
+                    playerManager.restoreSession(tracks)
+                }
+            }
+        }
+    }
+
+    private fun applyTracksToState(tracks: List<AudioTrack>, stopScanningIndicator: Boolean) {
+        val currentState = _uiState.value
+        val albums = repository.groupIntoAlbums(tracks)
+        val folders = repository.groupIntoFolders(tracks)
+        val byUri = tracks.associateBy { it.uri }
+        val byId = tracks.associateBy { it.id }
+        val enrichedPlaylistSongs = currentState.playlistSongs.map { song ->
+            byUri[song.uri] ?: byId[song.id] ?: song
+        }
+        val updatedSelectedAlbum = currentState.selectedAlbum?.let { selected ->
+            albums.find { it.title == selected.title }
+        }
+        val updatedSelectedFolder = currentState.selectedFolder?.let { selected ->
+            folders.find { it.name == selected.name }
+        }
+
+        _uiState.value = currentState.copy(
+            allTracks = tracks,
+            filteredTracks = filterTracks(tracks, currentState.searchQuery),
+            albums = albums,
+            folders = folders,
+            selectedAlbum = updatedSelectedAlbum,
+            selectedFolder = updatedSelectedFolder,
+            playlistSongs = enrichedPlaylistSongs,
+            isScanning = if (stopScanningIndicator) false else currentState.isScanning
+        )
     }
 
     fun setTab(tab: MusicTab) {

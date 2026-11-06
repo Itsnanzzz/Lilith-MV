@@ -12,6 +12,7 @@ import com.example.LilithApplication
 import com.example.R
 import com.example.data.DeleteMediaResult
 import com.example.data.MediaRepository
+import com.example.data.MediaStoreSignature
 import com.example.data.RenameMediaResult
 import com.example.data.model.FolderItem
 import com.example.data.model.VideoExtraInfo
@@ -23,6 +24,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 
 sealed class VideoActionEvent {
@@ -64,6 +67,10 @@ class VideoLibraryViewModel(application: Application) : AndroidViewModel(applica
         data class Rename(val video: VideoItem, val newFullName: String) : PendingAction()
     }
     private var pendingAction: PendingAction? = null
+    private val scanMutex = Mutex()
+    @Volatile
+    private var hasCompletedInitialScan = false
+    private var lastVideoStoreSignature: MediaStoreSignature? = null
 
     init {
         scanVideos()
@@ -71,26 +78,64 @@ class VideoLibraryViewModel(application: Application) : AndroidViewModel(applica
 
     fun scanVideos() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isScanning = true)
-            val list = repository.getVideos()
-            val folders = list.groupBy { it.folderName }.map { (fName, vList) ->
-                val sample = vList.firstOrNull()?.path ?: ""
-                val parentPath = if (sample.isNotEmpty()) File(sample).parent ?: "" else ""
-                FolderItem(
-                    name = fName,
-                    path = parentPath,
-                    trackCount = vList.size,
-                    isVideo = true
-                )
-            }.sortedBy { it.name.lowercase() }
-
-            _uiState.value = _uiState.value.copy(
-                allVideos = list,
-                filteredVideos = filterVideos(list, _uiState.value.searchQuery, _uiState.value.selectedFolder),
-                folders = folders,
-                isScanning = false
-            )
+            scanMutex.withLock {
+                _uiState.value = _uiState.value.copy(isScanning = true)
+                val signature = repository.getVideoStoreSignature()
+                val list = repository.queryVideosOrNull() ?: emptyList()
+                lastVideoStoreSignature = signature
+                applyVideosToState(list, stopScanningIndicator = true)
+                hasCompletedInitialScan = true
+            }
         }
+    }
+
+    suspend fun syncVideosInBackground(forceCheck: Boolean = false) {
+        if (!hasCompletedInitialScan) return
+        val currentState = _uiState.value
+        if (currentState.isScanning || currentState.isDeletingVideo || currentState.isRenamingVideo) {
+            return
+        }
+        scanMutex.withLock {
+            val latestState = _uiState.value
+            if (latestState.isScanning || latestState.isDeletingVideo || latestState.isRenamingVideo) {
+                return
+            }
+            val newSignature = repository.getVideoStoreSignature() ?: return
+            if (!forceCheck && newSignature == lastVideoStoreSignature) {
+                return
+            }
+            val list = repository.queryVideosOrNull() ?: return
+            lastVideoStoreSignature = newSignature
+            if (list != latestState.allVideos) {
+                applyVideosToState(list, stopScanningIndicator = false)
+            }
+        }
+    }
+
+    private fun applyVideosToState(list: List<VideoItem>, stopScanningIndicator: Boolean) {
+        val currentState = _uiState.value
+        val folders = list.groupBy { it.folderName }.map { (fName, vList) ->
+            val sample = vList.firstOrNull()?.path ?: ""
+            val parentPath = if (sample.isNotEmpty()) File(sample).parent ?: "" else ""
+            FolderItem(
+                name = fName,
+                path = parentPath,
+                trackCount = vList.size,
+                isVideo = true
+            )
+        }.sortedBy { it.name.lowercase() }
+
+        val updatedSelectedFolder = currentState.selectedFolder?.let { selected ->
+            folders.find { it.name == selected.name }
+        }
+
+        _uiState.value = currentState.copy(
+            allVideos = list,
+            filteredVideos = filterVideos(list, currentState.searchQuery, updatedSelectedFolder),
+            folders = folders,
+            selectedFolder = updatedSelectedFolder,
+            isScanning = if (stopScanningIndicator) false else currentState.isScanning
+        )
     }
 
     fun setSearchQuery(query: String) {
