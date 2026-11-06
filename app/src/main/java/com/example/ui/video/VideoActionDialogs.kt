@@ -51,30 +51,17 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.model.VideoExtraInfo
 import com.example.data.model.VideoItem
+import com.example.ui.common.MediaRenameDialog
 import com.example.ui.common.TimeUtils
 import com.example.ui.theme.AppPrimaryButton
 import com.example.ui.theme.AppSecondaryButton
 import com.example.ui.theme.AppThemeTokens
 import com.example.ui.theme.AppTokens
 import com.example.ui.theme.AppTypography
-import kotlinx.coroutines.delay
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
-fun formatFileSize(bytes: Long): String {
-    if (bytes <= 0) return "0 B"
-    val units = arrayOf("B", "KB", "MB", "GB", "TB")
-    val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt().coerceIn(0, units.size - 1)
-    return String.format(Locale.ROOT, "%.2f %s", bytes / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
-}
+fun formatFileSize(bytes: Long): String = TimeUtils.formatFileSize(bytes)
 
-fun formatTimestamp(seconds: Long): String {
-    if (seconds <= 0) return "Unknown"
-    val date = Date(seconds * 1000L)
-    val sdf = SimpleDateFormat("MMM dd, yyyy, HH:mm", Locale.ROOT)
-    return sdf.format(date)
-}
+fun formatTimestamp(seconds: Long): String = TimeUtils.formatTimestamp(seconds)
 
 /**
  * Flat Video Details Dialog:
@@ -224,116 +211,15 @@ fun VideoRenameDialog(
     onDismiss: () -> Unit,
     validateName: suspend (String) -> String?
 ) {
-    val colors = AppThemeTokens.colors
-    val currentBaseName = remember(video) { video.baseName }
-    val extension = remember(video) { video.extension }
-
-    var textState by remember(video) {
-        mutableStateOf(
-            TextFieldValue(
-                text = currentBaseName,
-                selection = TextRange(0, currentBaseName.length)
-            )
-        )
-    }
-
-    var validationError by remember { mutableStateOf<String?>(null) }
-    val focusRequester = remember { FocusRequester() }
-
-    LaunchedEffect(Unit) {
-        delay(120)
-        focusRequester.requestFocus()
-    }
-
-    LaunchedEffect(textState.text) {
-        val currentText = textState.text
-        validationError = validateName(currentText)
-    }
-
-    val trimmed = textState.text.trim()
-    val isUnchanged = trimmed == currentBaseName
-    val canRename = validationError == null && !isUnchanged && trimmed.isNotEmpty() && !isRenaming
-
-    AlertDialog(
-        onDismissRequest = { if (!isRenaming) onDismiss() },
-        shape = RoundedCornerShape(AppTokens.Radius24),
-        containerColor = colors.surface,
-        title = {
-            Text(
-                text = stringResource(R.string.rename_video_title),
-                style = AppTypography.screenTitle.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-                color = colors.textPrimary,
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(AppTokens.Radius12))
-                        .background(colors.surfaceMuted)
-                        .padding(horizontal = 14.dp, vertical = 12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        BasicTextField(
-                            value = textState,
-                            onValueChange = { textState = it },
-                            modifier = Modifier
-                                .weight(1f)
-                                .focusRequester(focusRequester)
-                                .testTag("rename_video_text_field"),
-                            textStyle = AppTypography.body.copy(color = colors.textPrimary, fontSize = 15.sp),
-                            singleLine = true,
-                            cursorBrush = SolidColor(colors.primary)
-                        )
-
-                        if (extension.isNotEmpty()) {
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = ".$extension",
-                                style = AppTypography.body.copy(
-                                    color = colors.textSecondary,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            )
-                        }
-                    }
-                }
-
-                if (validationError != null) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = validationError ?: "",
-                        style = AppTypography.caption,
-                        color = colors.destructive,
-                        modifier = Modifier.padding(horizontal = 4.dp)
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            AppPrimaryButton(
-                text = stringResource(R.string.rename_confirm),
-                onClick = {
-                    val full = if (extension.isNotEmpty()) "$trimmed.$extension" else trimmed
-                    onConfirm(full)
-                },
-                enabled = canRename,
-                modifier = Modifier.testTag("rename_dialog_confirm_button")
-            )
-        },
-        dismissButton = {
-            AppSecondaryButton(
-                text = stringResource(R.string.rename_cancel),
-                onClick = onDismiss,
-                testTag = "rename_dialog_cancel_button"
-            )
-        }
+    MediaRenameDialog(
+        title = stringResource(R.string.rename_video_title),
+        baseName = video.baseName,
+        extension = video.extension,
+        isRenaming = isRenaming,
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
+        validateName = validateName,
+        textFieldTestTag = "rename_video_text_field"
     )
 }
 

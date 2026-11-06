@@ -22,6 +22,7 @@ import com.example.data.model.FolderItem
 import com.example.playback.EqualizerState
 import com.example.playback.MusicPlaybackService
 import com.example.playback.MusicPlayerManager
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -92,6 +93,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val actionEvents: SharedFlow<MusicActionEvent> = _actionEvents.asSharedFlow()
 
     private var pendingRename: Pair<AudioTrack, String>? = null
+    private var playlistSongsJob: Job? = null
 
     val playlists = database.playlistDao().getAllPlaylists()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
@@ -110,12 +112,18 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             val tracks = repository.getAudioTracks()
             val albums = repository.groupIntoAlbums(tracks)
             val folders = repository.groupIntoFolders(tracks)
+            val byUri = tracks.associateBy { it.uri }
+            val byId = tracks.associateBy { it.id }
+            val enrichedPlaylistSongs = _uiState.value.playlistSongs.map { song ->
+                byUri[song.uri] ?: byId[song.id] ?: song
+            }
 
             _uiState.value = _uiState.value.copy(
                 allTracks = tracks,
                 filteredTracks = filterTracks(tracks, _uiState.value.searchQuery),
                 albums = albums,
                 folders = folders,
+                playlistSongs = enrichedPlaylistSongs,
                 isScanning = false
             )
             playerManager.restoreSession(tracks)
@@ -157,23 +165,31 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectPlaylist(playlist: PlaylistEntity?) {
+        playlistSongsJob?.cancel()
         _uiState.value = _uiState.value.copy(selectedPlaylist = playlist)
         if (playlist != null) {
-            viewModelScope.launch {
+            playlistSongsJob = viewModelScope.launch {
                 database.playlistDao().getSongsForPlaylist(playlist.id).collect { songEntities ->
+                    val tracksSnapshot = _uiState.value.allTracks
+                    val byUri = tracksSnapshot.associateBy { it.uri }
+                    val byId = tracksSnapshot.associateBy { it.id }
                     val songs = songEntities.map { entity ->
-                        AudioTrack(
-                            id = entity.audioId,
-                            uri = entity.audioUri,
-                            title = entity.title,
-                            artist = entity.artist,
-                            album = entity.album,
-                            durationMs = entity.durationMs
-                        )
+                        byUri[entity.audioUri]
+                            ?: byId[entity.audioId]
+                            ?: AudioTrack(
+                                id = entity.audioId,
+                                uri = entity.audioUri,
+                                title = entity.title,
+                                artist = entity.artist,
+                                album = entity.album,
+                                durationMs = entity.durationMs
+                            )
                     }
                     _uiState.value = _uiState.value.copy(playlistSongs = songs)
                 }
             }
+        } else {
+            _uiState.value = _uiState.value.copy(playlistSongs = emptyList())
         }
     }
 
@@ -349,8 +365,13 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         if (fullName.toByteArray(Charsets.UTF_8).size > 255) {
             return getApplication<Application>().getString(R.string.rename_error_too_long)
         }
-        if (trimmed != track.baseName && repository.checkTrackNameExists(track, fullName)) {
-            return getApplication<Application>().getString(R.string.rename_error_already_exists)
+        if (trimmed != track.baseName) {
+            val existsInState = _uiState.value.allTracks.any {
+                it.id != track.id && it.folderName == track.folderName && it.fullDisplayName.equals(fullName, ignoreCase = true)
+            }
+            if (existsInState || repository.checkTrackNameExists(track, fullName)) {
+                return getApplication<Application>().getString(R.string.rename_error_already_exists)
+            }
         }
         return null
     }
@@ -407,8 +428,14 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 val parent = File(track.path).parent ?: ""
                 if (parent.isNotEmpty()) "$parent/$newFullName" else newFullName
             } else ""
+            val newUri = if (oldUri.startsWith("file://") && newPath.isNotEmpty()) {
+                Uri.fromFile(File(newPath)).toString()
+            } else {
+                oldUri
+            }
             val titleWasFileName = track.title == track.baseName
             val updatedTrack = track.copy(
+                uri = newUri,
                 title = if (titleWasFileName) newFullName.substringBeforeLast('.') else track.title,
                 displayName = newFullName,
                 path = newPath
@@ -459,13 +486,14 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun cancelDeleteTrack() {
-        _uiState.value = _uiState.value.copy(trackToDelete = null, isDeletingTrack = false)
+        _uiState.value = _uiState.value.copy(trackToDelete = null, isDeletingTrack = false, operatingTrackId = null)
     }
 
     fun confirmDeleteTrack() {
         val track = _uiState.value.trackToDelete ?: return
+        if (_uiState.value.isDeletingTrack) return
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isDeletingTrack = true)
+            _uiState.value = _uiState.value.copy(isDeletingTrack = true, operatingTrackId = track.id)
             when (val result = repository.deleteTrack(track)) {
                 is DeleteTrackResult.Success -> {
                     onTrackDeletedSuccessfully(track)
@@ -477,7 +505,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     _deleteEvents.emit(MusicDeleteEvent.RequestStoragePermission(result.track))
                 }
                 is DeleteTrackResult.Error -> {
-                    _uiState.value = _uiState.value.copy(isDeletingTrack = false, trackToDelete = null)
+                    _uiState.value = _uiState.value.copy(
+                        isDeletingTrack = false,
+                        trackToDelete = null,
+                        operatingTrackId = null
+                    )
                     _deleteEvents.emit(
                         MusicDeleteEvent.ShowMessage(
                             getApplication<Application>().getString(R.string.delete_failed_with_reason, result.message)
@@ -496,7 +528,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     if (deleted) {
                         onTrackDeletedSuccessfully(track)
                     } else {
-                        _uiState.value = _uiState.value.copy(isDeletingTrack = false, trackToDelete = null)
+                        _uiState.value = _uiState.value.copy(
+                            isDeletingTrack = false,
+                            trackToDelete = null,
+                            operatingTrackId = null
+                        )
                         _deleteEvents.emit(
                             MusicDeleteEvent.ShowMessage(
                                 getApplication<Application>().getString(R.string.delete_failed)
@@ -507,7 +543,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     onTrackDeletedSuccessfully(track)
                 }
             } else {
-                _uiState.value = _uiState.value.copy(isDeletingTrack = false, trackToDelete = null)
+                _uiState.value = _uiState.value.copy(
+                    isDeletingTrack = false,
+                    trackToDelete = null,
+                    operatingTrackId = null
+                )
             }
         }
     }
@@ -516,7 +556,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         if (granted) {
             confirmDeleteTrack()
         } else {
-            _uiState.value = _uiState.value.copy(isDeletingTrack = false, trackToDelete = null)
+            _uiState.value = _uiState.value.copy(
+                isDeletingTrack = false,
+                trackToDelete = null,
+                operatingTrackId = null
+            )
             viewModelScope.launch {
                 _deleteEvents.emit(
                     MusicDeleteEvent.ShowMessage(
@@ -560,7 +604,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 selectedFolder = updatedSelectedFolder,
                 playlistSongs = updatedPlaylistSongs,
                 isDeletingTrack = false,
-                trackToDelete = null
+                trackToDelete = null,
+                operatingTrackId = null
             )
 
             _deleteEvents.emit(

@@ -12,7 +12,7 @@ import com.example.LilithApplication
 import com.example.R
 import com.example.data.DeleteMediaResult
 import com.example.data.MediaRepository
-import com.example.data.RenameVideoResult
+import com.example.data.RenameMediaResult
 import com.example.data.model.FolderItem
 import com.example.data.model.VideoExtraInfo
 import com.example.data.model.VideoItem
@@ -215,20 +215,20 @@ class VideoLibraryViewModel(application: Application) : AndroidViewModel(applica
         pendingAction = PendingAction.Rename(video, newFullName)
         viewModelScope.launch {
             when (val res = repository.renameVideo(video, newFullName)) {
-                is RenameVideoResult.Success -> {
+                is RenameMediaResult.Success -> {
                     onVideoRenamedSuccessfully(video, newFullName)
                 }
-                is RenameVideoResult.RequiresIntentSender -> {
+                is RenameMediaResult.RequiresIntentSender -> {
                     _actionEvents.emit(
                         VideoActionEvent.LaunchIntentSender(res.intentSender, VideoActionEvent.ActionType.RENAME)
                     )
                 }
-                is RenameVideoResult.RequiresPermission -> {
+                is RenameMediaResult.RequiresPermission -> {
                     _actionEvents.emit(
                         VideoActionEvent.RequestStoragePermission(res.permission, VideoActionEvent.ActionType.RENAME)
                     )
                 }
-                is RenameVideoResult.Error -> {
+                is RenameMediaResult.Error -> {
                     _uiState.value = _uiState.value.copy(
                         isRenamingVideo = false,
                         videoToRename = null,

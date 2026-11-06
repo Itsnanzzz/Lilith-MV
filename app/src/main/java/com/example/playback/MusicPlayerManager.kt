@@ -478,26 +478,26 @@ class MusicPlayerManager(private val context: Context) {
     }
 
     fun removeTrackFromPlayback(trackUri: String) {
-        val controller = mediaController ?: return
         val currentQueue = _queue.value.toMutableList()
         val index = currentQueue.indexOfFirst { it.uri == trackUri }
         if (index == -1) return
 
         val isCurrent = _currentTrack.value?.uri == trackUri
+        val controller = mediaController
 
         if (isCurrent) {
             if (currentQueue.size > 1) {
                 val nextIndex = if (index < currentQueue.size - 1) index + 1 else index - 1
                 val nextTrack = currentQueue[nextIndex]
-                controller.seekTo(nextIndex, 0L)
+                controller?.seekTo(nextIndex, 0L)
                 _currentTrack.value = nextTrack
-                controller.removeMediaItem(index)
+                controller?.removeMediaItem(index)
                 currentQueue.removeAt(index)
                 _queue.value = currentQueue
                 saveSessionNow()
             } else {
-                controller.stop()
-                controller.clearMediaItems()
+                controller?.stop()
+                controller?.clearMediaItems()
                 _queue.value = emptyList()
                 _currentTrack.value = null
                 _isPlaying.value = false
@@ -508,7 +508,7 @@ class MusicPlayerManager(private val context: Context) {
         } else {
             currentQueue.removeAt(index)
             _queue.value = currentQueue
-            controller.removeMediaItem(index)
+            controller?.removeMediaItem(index)
             saveSessionNow()
         }
     }

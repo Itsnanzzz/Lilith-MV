@@ -1,7 +1,9 @@
 package com.example.ui.music
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,9 +19,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AvTimer
 import androidx.compose.material.icons.filled.Check
@@ -34,18 +39,22 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -54,7 +63,10 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.db.PlaylistEntity
 import com.example.data.model.AudioTrack
+import com.example.data.model.SongExtraInfo
+import com.example.playback.AudioFormatDetector
 import com.example.playback.EqualizerState
+import com.example.ui.common.TimeUtils
 import com.example.ui.theme.AppChip
 import com.example.ui.theme.AppPrimaryButton
 import com.example.ui.theme.AppSecondaryButton
@@ -63,6 +75,8 @@ import com.example.ui.theme.AppSwitch
 import com.example.ui.theme.AppThemeTokens
 import com.example.ui.theme.AppTokens
 import com.example.ui.theme.AppTypography
+import kotlinx.coroutines.launch
+import java.util.Locale
 
 @Composable
 fun EqualizerDialog(
@@ -588,4 +602,165 @@ fun DeletePermanentConfirmationDialog(
             )
         }
     )
+}
+
+/**
+ * Flat Song Details Dialog:
+ * Displays track metadata immediately and lazily loads codec/bitrate/sample rate/bit depth/channels.
+ * Long-press on Path copies it to clipboard and triggers onCopyPath.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun SongInfoDialog(
+    track: AudioTrack,
+    onDismiss: () -> Unit,
+    onCopyPath: suspend () -> Unit,
+    loadExtraInfo: suspend (AudioTrack) -> SongExtraInfo
+) {
+    val colors = AppThemeTokens.colors
+    val clipboardManager = LocalClipboardManager.current
+    val coroutineScope = rememberCoroutineScope()
+    var extraInfo by remember(track.uri) { mutableStateOf<SongExtraInfo?>(null) }
+
+    LaunchedEffect(track.uri) {
+        extraInfo = loadExtraInfo(track)
+    }
+
+    val loadingText = stringResource(R.string.info_loading)
+    val unknownText = stringResource(R.string.info_unknown)
+    val formatInfo = remember(track.mimeType) {
+        AudioFormatDetector.detectFromMime(track.mimeType)
+    }
+    val qualityText = when {
+        !track.mimeType.isNullOrBlank() -> {
+            if (formatInfo.isLossless) stringResource(R.string.format_lossless) else stringResource(R.string.format_lossy)
+        }
+        track.extension.lowercase(Locale.ROOT) in setOf("flac", "alac", "wav", "aiff", "pcm") -> {
+            stringResource(R.string.format_lossless)
+        }
+        track.extension.isNotBlank() -> {
+            stringResource(R.string.format_lossy)
+        }
+        else -> unknownText
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(AppTokens.Radius24),
+        containerColor = colors.surface,
+        title = {
+            Text(
+                text = stringResource(R.string.song_info_title),
+                style = AppTypography.screenTitle.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+                color = colors.textPrimary,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        text = {
+            SelectionContainer {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    SongInfoDetailRow(label = stringResource(R.string.info_name), value = track.fullDisplayName)
+                    SongInfoDetailRow(label = stringResource(R.string.info_title), value = track.title)
+                    SongInfoDetailRow(label = stringResource(R.string.info_artist), value = track.artist)
+                    SongInfoDetailRow(label = stringResource(R.string.info_album), value = track.album)
+
+                    val displayPath = track.folderPath
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(AppTokens.Radius8))
+                            .combinedClickable(
+                                onClick = {},
+                                onLongClick = {
+                                    clipboardManager.setText(AnnotatedString(displayPath))
+                                    coroutineScope.launch {
+                                        onCopyPath()
+                                    }
+                                }
+                            )
+                            .padding(vertical = 2.dp)
+                            .testTag("song_info_path")
+                    ) {
+                        Text(
+                            text = stringResource(R.string.info_path),
+                            style = AppTypography.caption,
+                            color = colors.textSecondary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = displayPath,
+                            style = AppTypography.body.copy(fontSize = 13.sp),
+                            color = colors.primary
+                        )
+                    }
+
+                    val sizeStr = if (track.size > 0) TimeUtils.formatFileSize(track.size) else unknownText
+                    SongInfoDetailRow(label = stringResource(R.string.info_size), value = sizeStr)
+                    SongInfoDetailRow(label = stringResource(R.string.info_duration), value = TimeUtils.formatDuration(track.durationMs))
+
+                    val typeStr = track.mimeType?.takeIf { it.isNotBlank() } ?: unknownText
+                    SongInfoDetailRow(label = stringResource(R.string.info_type), value = typeStr)
+                    SongInfoDetailRow(label = stringResource(R.string.info_quality), value = qualityText)
+
+                    SongInfoDetailRow(
+                        label = stringResource(R.string.info_codec),
+                        value = extraInfo?.codec ?: loadingText
+                    )
+                    SongInfoDetailRow(
+                        label = stringResource(R.string.info_bitrate),
+                        value = extraInfo?.bitrate ?: loadingText
+                    )
+                    SongInfoDetailRow(
+                        label = stringResource(R.string.info_sample_rate),
+                        value = extraInfo?.sampleRate ?: loadingText
+                    )
+                    SongInfoDetailRow(
+                        label = stringResource(R.string.info_bit_depth),
+                        value = extraInfo?.bitDepth ?: loadingText
+                    )
+                    SongInfoDetailRow(
+                        label = stringResource(R.string.info_channels),
+                        value = extraInfo?.channels ?: loadingText
+                    )
+
+                    val addedStr = if (track.dateAdded > 0) TimeUtils.formatTimestamp(track.dateAdded) else unknownText
+                    SongInfoDetailRow(label = stringResource(R.string.info_date_added), value = addedStr)
+
+                    val modStr = if (track.dateModified > 0) TimeUtils.formatTimestamp(track.dateModified) else unknownText
+                    SongInfoDetailRow(label = stringResource(R.string.info_date_modified), value = modStr)
+                }
+            }
+        },
+        confirmButton = {
+            AppSecondaryButton(
+                text = stringResource(R.string.close),
+                onClick = onDismiss,
+                testTag = "info_dialog_close_button"
+            )
+        }
+    )
+}
+
+@Composable
+private fun SongInfoDetailRow(label: String, value: String) {
+    val colors = AppThemeTokens.colors
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            style = AppTypography.caption,
+            color = colors.textSecondary
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = value,
+            style = AppTypography.body,
+            color = colors.textPrimary
+        )
+    }
 }

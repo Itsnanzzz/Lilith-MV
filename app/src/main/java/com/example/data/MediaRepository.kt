@@ -16,6 +16,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import androidx.core.content.ContextCompat
 import androidx.media3.common.C
 import com.example.R
@@ -244,10 +245,33 @@ class MediaRepository(private val context: Context) {
         videos
     }
 
-    suspend fun parseTrackFromUri(uri: Uri, displayName: String? = null): AudioTrack = withContext(Dispatchers.IO) {
+    suspend fun parseTrackFromUri(uri: Uri, displayName: String? = null, size: Long = 0L): AudioTrack = withContext(Dispatchers.IO) {
         val fallbackTitle = displayName?.substringBeforeLast('.')?.takeIf { it.isNotBlank() }
             ?: uri.lastPathSegment?.substringAfterLast('/')?.substringBeforeLast('.')?.takeIf { it.isNotBlank() }
             ?: context.getString(R.string.default_song_title)
+
+        val resolvedSize = if (size > 0L) {
+            size
+        } else if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
+            try {
+                contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val idx = cursor.getColumnIndex(OpenableColumns.SIZE)
+                        if (idx >= 0 && !cursor.isNull(idx)) cursor.getLong(idx) else 0L
+                    } else 0L
+                } ?: 0L
+            } catch (_: Exception) {
+                0L
+            }
+        } else if (uri.scheme == "file") {
+            try {
+                File(uri.path ?: "").takeIf { it.exists() }?.length() ?: 0L
+            } catch (_: Exception) {
+                0L
+            }
+        } else {
+            0L
+        }
 
         try {
             val retriever = MediaMetadataRetriever()
@@ -275,6 +299,7 @@ class MediaRepository(private val context: Context) {
                 folderName = context.getString(R.string.subtitle_external_file),
                 mimeType = mime,
                 albumArtUri = if (hasArt) uri.toString() else null,
+                size = resolvedSize,
                 displayName = displayName ?: (uri.lastPathSegment?.substringAfterLast('/') ?: "")
             )
         } catch (e: Exception) {
@@ -289,6 +314,7 @@ class MediaRepository(private val context: Context) {
                 folderName = context.getString(R.string.subtitle_external_file),
                 mimeType = null,
                 albumArtUri = null,
+                size = resolvedSize,
                 displayName = displayName ?: (uri.lastPathSegment?.substringAfterLast('/') ?: "")
             )
         }
@@ -512,6 +538,21 @@ class MediaRepository(private val context: Context) {
             }
         }
 
+        // 1b. Direct file:// URI
+        if (uri.scheme == "file") {
+            val targetPath = path ?: uri.path
+            val file = if (!targetPath.isNullOrEmpty()) File(targetPath) else null
+            return@withContext try {
+                if (file != null && (!file.exists() || file.delete())) {
+                    DeleteMediaResult.Success
+                } else {
+                    DeleteMediaResult.Error(context.getString(R.string.delete_error_generic))
+                }
+            } catch (e: Exception) {
+                DeleteMediaResult.Error(e.localizedMessage ?: context.getString(R.string.delete_error_generic))
+            }
+        }
+
         // 2. Android 11+ (API 30+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             return@withContext try {
@@ -675,6 +716,33 @@ class MediaRepository(private val context: Context) {
                 else RenameMediaResult.Error(context.getString(R.string.rename_error_doc_failed))
             } catch (se: SecurityException) {
                 RenameMediaResult.Error(context.getString(R.string.delete_error_readonly_permission))
+            } catch (e: Exception) {
+                RenameMediaResult.Error(e.localizedMessage ?: context.getString(R.string.rename_failed))
+            }
+        }
+
+        // 1b. Direct file:// URI
+        if (uri.scheme == "file") {
+            val targetPath = path.ifEmpty { uri.path ?: "" }
+            return@withContext try {
+                val oldFile = File(targetPath)
+                val parent = oldFile.parentFile
+                if (targetPath.isNotEmpty() && oldFile.exists() && parent != null) {
+                    val newFile = File(parent, newFullName)
+                    if (oldFile.renameTo(newFile)) {
+                        MediaScannerConnection.scanFile(
+                            context,
+                            arrayOf(oldFile.absolutePath, newFile.absolutePath),
+                            null,
+                            null
+                        )
+                        RenameMediaResult.Success
+                    } else {
+                        RenameMediaResult.Error(context.getString(R.string.rename_failed))
+                    }
+                } else {
+                    RenameMediaResult.Error(context.getString(R.string.delete_error_file_not_found))
+                }
             } catch (e: Exception) {
                 RenameMediaResult.Error(e.localizedMessage ?: context.getString(R.string.rename_failed))
             }
@@ -887,16 +955,20 @@ class MediaRepository(private val context: Context) {
                             }
                         }
 
-                        val formatDetected = AudioFormatDetector.detectFromMime(mime)
-                        if (formatDetected.bitDepth > 0) {
-                            bitDepthStr = "${formatDetected.bitDepth}-bit"
-                        } else if (format.containsKey("pcm-encoding")) {
+                        if (format.containsKey("pcm-encoding")) {
                             val enc = format.getInteger("pcm-encoding")
                             bitDepthStr = when (enc) {
                                 C.ENCODING_PCM_16BIT -> "16-bit"
                                 C.ENCODING_PCM_24BIT -> "24-bit"
                                 C.ENCODING_PCM_32BIT -> "32-bit"
+                                C.ENCODING_PCM_FLOAT -> "32-bit"
                                 else -> "Unknown"
+                            }
+                        }
+                        if (bitDepthStr == "Unknown") {
+                            val formatDetected = AudioFormatDetector.detectFromMime(mime)
+                            if (formatDetected.bitDepth > 0) {
+                                bitDepthStr = "${formatDetected.bitDepth}-bit"
                             }
                         }
                         break
@@ -910,10 +982,24 @@ class MediaRepository(private val context: Context) {
             try { extractor?.release() } catch (_: Exception) {}
         }
 
-        if (codecStr == "Unknown") {
+        if (codecStr == "Unknown" && !track.mimeType.isNullOrBlank()) {
             val detected = AudioFormatDetector.detectFromMime(track.mimeType)
-            if (detected.codec != "UNKNOWN" && detected.codec.isNotBlank()) {
+            if (detected.codec != "UNKNOWN" && detected.codec != "AUDIO" && detected.codec.isNotBlank()) {
                 codecStr = detected.codec
+            }
+        }
+        if (codecStr == "Unknown" && track.extension.isNotBlank()) {
+            codecStr = when (track.extension.lowercase(Locale.ROOT)) {
+                "flac" -> "FLAC"
+                "alac" -> "ALAC"
+                "wav" -> "WAV"
+                "aiff", "aif" -> "AIFF"
+                "mp3" -> "MP3"
+                "aac", "m4a" -> "AAC"
+                "ogg", "oga" -> "OGG Vorbis"
+                "opus" -> "Opus"
+                "wma" -> "WMA"
+                else -> track.extension.uppercase(Locale.ROOT)
             }
         }
 

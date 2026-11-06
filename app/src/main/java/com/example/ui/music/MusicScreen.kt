@@ -3,9 +3,9 @@ package com.example.ui.music
 import android.Manifest
 import android.app.Activity
 import android.content.ClipData
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
@@ -19,10 +19,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -114,6 +112,7 @@ import com.example.data.model.AlbumItem
 import com.example.data.model.AudioTrack
 import com.example.data.model.FolderItem
 import com.example.playback.AudioFormatDetector
+import com.example.ui.common.MediaRenameDialog
 import com.example.ui.common.MusicThumbnail
 import com.example.ui.common.TimeUtils
 import com.example.ui.theme.AppBadge
@@ -127,6 +126,8 @@ import com.example.ui.theme.AppTokens
 import com.example.ui.theme.AppTypography
 import com.example.ui.theme.LilithTheme
 import com.example.ui.theme.rememberIsAnimationDisabled
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Composable
@@ -441,7 +442,7 @@ fun MusicScreen(
                                     onAddToQueue = { track -> viewModel.playerManager.addToQueue(track) },
                                     onAddToPlaylist = { pId, track -> viewModel.addTrackToPlaylist(pId, track) },
                                     onInfo = { track -> viewModel.showTrackInfo(track) },
-                                    onShare = { track -> shareSong(context, snackbarHostState, track) },
+                                    onShare = { track -> shareSong(context, snackbarHostState, track, coroutineScope) },
                                     onRename = { track -> viewModel.showRenameTrackDialog(track) },
                                     onDeletePermanently = { track -> viewModel.requestDeleteTrack(track) },
                                     isDeletingTrack = uiState.isDeletingTrack,
@@ -469,7 +470,7 @@ fun MusicScreen(
                                         onAddToPlaylist = { pId, track -> viewModel.addTrackToPlaylist(pId, track) },
                                         showBackButton = true,
                                         onInfo = { track -> viewModel.showTrackInfo(track) },
-                                        onShare = { track -> shareSong(context, snackbarHostState, track) },
+                                        onShare = { track -> shareSong(context, snackbarHostState, track, coroutineScope) },
                                         onRename = { track -> viewModel.showRenameTrackDialog(track) },
                                         onDeletePermanently = { track -> viewModel.requestDeleteTrack(track) },
                                         isDeletingTrack = uiState.isDeletingTrack,
@@ -515,7 +516,7 @@ fun MusicScreen(
                                         onAddToPlaylist = { pId, track -> viewModel.addTrackToPlaylist(pId, track) },
                                         showBackButton = true,
                                         onInfo = { track -> viewModel.showTrackInfo(track) },
-                                        onShare = { track -> shareSong(context, snackbarHostState, track) },
+                                        onShare = { track -> shareSong(context, snackbarHostState, track, coroutineScope) },
                                         onRename = { track -> viewModel.showRenameTrackDialog(track) },
                                         onDeletePermanently = { track -> viewModel.requestDeleteTrack(track) },
                                         isDeletingTrack = uiState.isDeletingTrack,
@@ -560,7 +561,7 @@ fun MusicScreen(
                                         showBackButton = false,
                                         currentPlaylistId = currentPlaylist.id,
                                         onInfo = { track -> viewModel.showTrackInfo(track) },
-                                        onShare = { track -> shareSong(context, snackbarHostState, track) },
+                                        onShare = { track -> shareSong(context, snackbarHostState, track, coroutineScope) },
                                         onRename = { track -> viewModel.showRenameTrackDialog(track) },
                                         operatingTrackId = uiState.operatingTrackId,
                                         onRemoveFromPlaylist = { track ->
@@ -655,8 +656,48 @@ fun MusicScreen(
             isRenaming = uiState.isRenamingTrack,
             onConfirm = { viewModel.confirmRenameTrack(track, it) },
             onDismiss = { viewModel.dismissRenameTrackDialog() },
-            validateName = { viewModel.validateTrackName(track, it) }
+            validateName = { viewModel.validateTrackName(track, it) },
+            textFieldTestTag = "rename_song_text_field"
         )
+    }
+}
+
+private fun shareSong(
+    context: Context,
+    snackbarHostState: SnackbarHostState,
+    track: AudioTrack,
+    coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Main.immediate)
+) {
+    try {
+        if (track.uri.isBlank()) {
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar(context.getString(R.string.cant_share_file))
+            }
+            return
+        }
+        val uri = Uri.parse(track.uri)
+        if (uri.scheme == "file") {
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar(context.getString(R.string.cant_share_file))
+            }
+        } else {
+            val mime = track.mimeType?.takeIf { it.isNotBlank() } ?: "audio/*"
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = mime
+                putExtra(Intent.EXTRA_STREAM, uri)
+                clipData = ClipData.newUri(context.contentResolver, track.title.ifBlank { "audio" }, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val chooser = Intent.createChooser(shareIntent, context.getString(R.string.share_song_title))
+            if (context !is Activity) {
+                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(chooser)
+        }
+    } catch (_: Exception) {
+        coroutineScope.launch {
+            snackbarHostState.showSnackbar(context.getString(R.string.cant_share_file))
+        }
     }
 }
 
@@ -829,8 +870,7 @@ fun SongRowItem(
                     onDismissRequest = { menuExpanded = false },
                     modifier = Modifier
                         .widthIn(min = 190.dp, max = 240.dp)
-                        .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.6f)
-                        .verticalScroll(rememberScrollState())
+                        .heightIn(max = 360.dp)
                         .shadow(elevation = 8.dp, shape = RoundedCornerShape(AppTokens.Radius16))
                         .background(colors.surface, shape = RoundedCornerShape(AppTokens.Radius16))
                 ) {
@@ -932,7 +972,8 @@ fun SongRowItem(
                                 tint = colors.textPrimary,
                                 modifier = Modifier.size(20.dp)
                             )
-                        }
+                        },
+                        modifier = Modifier.testTag("song_menu_info_${track.id}")
                     )
                     DropdownMenuItem(
                         text = {
@@ -951,7 +992,8 @@ fun SongRowItem(
                                 tint = colors.textPrimary,
                                 modifier = Modifier.size(20.dp)
                             )
-                        }
+                        },
+                        modifier = Modifier.testTag("song_menu_share_${track.id}")
                     )
                     DropdownMenuItem(
                         text = {
@@ -970,7 +1012,8 @@ fun SongRowItem(
                                 tint = colors.textPrimary,
                                 modifier = Modifier.size(20.dp)
                             )
-                        }
+                        },
+                        modifier = Modifier.testTag("song_menu_rename_${track.id}")
                     )
 
                     // "Delete Permanently" as LAST item, separated by hairline divider (Never in playlist detail)
@@ -1237,10 +1280,14 @@ fun CollectionDetailView(
             onPlayTrack = onPlayTrack,
             onAddToQueue = onAddToQueue,
             onAddToPlaylist = onAddToPlaylist,
+            onInfo = onInfo,
+            onShare = onShare,
+            onRename = onRename,
             currentPlaylistId = currentPlaylistId,
             onRemoveFromPlaylist = onRemoveFromPlaylist,
             onDeletePermanently = onDeletePermanently,
             isDeletingTrack = isDeletingTrack,
+            operatingTrackId = operatingTrackId,
             emptyMessage = if (currentPlaylistId != null) stringResource(R.string.playlist_empty) else stringResource(R.string.no_media_found)
         )
     }
