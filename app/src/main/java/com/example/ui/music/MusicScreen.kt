@@ -2,7 +2,10 @@ package com.example.ui.music
 
 import android.Manifest
 import android.app.Activity
+import android.content.ClipData
+import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
@@ -16,7 +19,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -55,6 +61,9 @@ import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
@@ -209,6 +218,18 @@ fun MusicScreen(
         }
     }
 
+    val renameIntentSenderLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        viewModel.onRenameIntentSenderResult(result.resultCode == Activity.RESULT_OK)
+    }
+
+    val renameStoragePermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        viewModel.onRenameStoragePermissionResult(isGranted)
+    }
+
     LaunchedEffect(Unit) {
         viewModel.deleteEvents.collect { event ->
             when (event) {
@@ -223,6 +244,22 @@ fun MusicScreen(
                 is MusicDeleteEvent.ShowMessage -> {
                     snackbarHostState.showSnackbar(event.message)
                 }
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.actionEvents.collect { event ->
+            when (event) {
+                is MusicActionEvent.LaunchRenameIntentSender -> {
+                    renameIntentSenderLauncher.launch(
+                        IntentSenderRequest.Builder(event.intentSender).build()
+                    )
+                }
+                is MusicActionEvent.RequestRenameStoragePermission -> {
+                    renameStoragePermissionLauncher.launch(event.permission)
+                }
+                is MusicActionEvent.ShowMessage -> snackbarHostState.showSnackbar(event.message)
             }
         }
     }
@@ -403,8 +440,12 @@ fun MusicScreen(
                                     onPlayTrack = { track -> viewModel.playTrack(track) },
                                     onAddToQueue = { track -> viewModel.playerManager.addToQueue(track) },
                                     onAddToPlaylist = { pId, track -> viewModel.addTrackToPlaylist(pId, track) },
+                                    onInfo = { track -> viewModel.showTrackInfo(track) },
+                                    onShare = { track -> shareSong(context, snackbarHostState, track) },
+                                    onRename = { track -> viewModel.showRenameTrackDialog(track) },
                                     onDeletePermanently = { track -> viewModel.requestDeleteTrack(track) },
-                                    isDeletingTrack = uiState.isDeletingTrack
+                                    isDeletingTrack = uiState.isDeletingTrack,
+                                    operatingTrackId = uiState.operatingTrackId
                                 )
                             }
 
@@ -427,8 +468,12 @@ fun MusicScreen(
                                         onAddToQueue = { track -> viewModel.playerManager.addToQueue(track) },
                                         onAddToPlaylist = { pId, track -> viewModel.addTrackToPlaylist(pId, track) },
                                         showBackButton = true,
+                                        onInfo = { track -> viewModel.showTrackInfo(track) },
+                                        onShare = { track -> shareSong(context, snackbarHostState, track) },
+                                        onRename = { track -> viewModel.showRenameTrackDialog(track) },
                                         onDeletePermanently = { track -> viewModel.requestDeleteTrack(track) },
-                                        isDeletingTrack = uiState.isDeletingTrack
+                                        isDeletingTrack = uiState.isDeletingTrack,
+                                        operatingTrackId = uiState.operatingTrackId
                                     )
                                 } else {
                                     val displayAlbums = remember(uiState.albums, uiState.searchQuery) {
@@ -469,8 +514,12 @@ fun MusicScreen(
                                         onAddToQueue = { track -> viewModel.playerManager.addToQueue(track) },
                                         onAddToPlaylist = { pId, track -> viewModel.addTrackToPlaylist(pId, track) },
                                         showBackButton = true,
+                                        onInfo = { track -> viewModel.showTrackInfo(track) },
+                                        onShare = { track -> shareSong(context, snackbarHostState, track) },
+                                        onRename = { track -> viewModel.showRenameTrackDialog(track) },
                                         onDeletePermanently = { track -> viewModel.requestDeleteTrack(track) },
-                                        isDeletingTrack = uiState.isDeletingTrack
+                                        isDeletingTrack = uiState.isDeletingTrack,
+                                        operatingTrackId = uiState.operatingTrackId
                                     )
                                 } else {
                                     val displayFolders = remember(uiState.folders, uiState.searchQuery) {
@@ -510,6 +559,10 @@ fun MusicScreen(
                                         onAddToPlaylist = { pId, track -> viewModel.addTrackToPlaylist(pId, track) },
                                         showBackButton = false,
                                         currentPlaylistId = currentPlaylist.id,
+                                        onInfo = { track -> viewModel.showTrackInfo(track) },
+                                        onShare = { track -> shareSong(context, snackbarHostState, track) },
+                                        onRename = { track -> viewModel.showRenameTrackDialog(track) },
+                                        operatingTrackId = uiState.operatingTrackId,
                                         onRemoveFromPlaylist = { track ->
                                             coroutineScope.launch {
                                                 val removedEntity = viewModel.removeTrackFromPlaylist(currentPlaylist.id, track)
@@ -584,6 +637,27 @@ fun MusicScreen(
             onDismiss = { viewModel.cancelDeleteTrack() }
         )
     }
+
+    uiState.trackForInfo?.let { track ->
+        SongInfoDialog(
+            track = track,
+            onDismiss = { viewModel.dismissTrackInfo() },
+            onCopyPath = { snackbarHostState.showSnackbar(context.getString(R.string.copied)) },
+            loadExtraInfo = { viewModel.loadSongExtraInfo(it) }
+        )
+    }
+
+    uiState.trackToRename?.let { track ->
+        MediaRenameDialog(
+            title = stringResource(R.string.rename_song_title),
+            baseName = track.baseName,
+            extension = track.extension,
+            isRenaming = uiState.isRenamingTrack,
+            onConfirm = { viewModel.confirmRenameTrack(track, it) },
+            onDismiss = { viewModel.dismissRenameTrackDialog() },
+            validateName = { viewModel.validateTrackName(track, it) }
+        )
+    }
 }
 
 /**
@@ -598,10 +672,14 @@ fun SongsListView(
     onPlayTrack: (AudioTrack) -> Unit,
     onAddToQueue: (AudioTrack) -> Unit,
     onAddToPlaylist: (Long, AudioTrack) -> Unit,
+    onInfo: (AudioTrack) -> Unit = {},
+    onShare: (AudioTrack) -> Unit = {},
+    onRename: (AudioTrack) -> Unit = {},
     currentPlaylistId: Long? = null,
     onRemoveFromPlaylist: ((AudioTrack) -> Unit)? = null,
     onDeletePermanently: ((AudioTrack) -> Unit)? = null,
     isDeletingTrack: Boolean = false,
+    operatingTrackId: Long? = null,
     emptyMessage: String = stringResource(R.string.no_media_found),
     listState: LazyListState = rememberLazyListState()
 ) {
@@ -630,10 +708,14 @@ fun SongsListView(
                     onClick = { onPlayTrack(track) },
                     onAddToQueue = { onAddToQueue(track) },
                     onAddToPlaylist = { pId -> onAddToPlaylist(pId, track) },
+                    onInfo = { onInfo(track) },
+                    onShare = { onShare(track) },
+                    onRename = { onRename(track) },
                     currentPlaylistId = currentPlaylistId,
                     onRemoveFromPlaylist = onRemoveFromPlaylist?.let { { it(track) } },
                     onDeletePermanently = onDeletePermanently?.let { { it(track) } },
-                    isDeleting = isDeletingTrack
+                    isDeleting = isDeletingTrack,
+                    isOperating = operatingTrackId == track.id
                 )
             }
         }
@@ -657,10 +739,14 @@ fun SongRowItem(
     onClick: () -> Unit,
     onAddToQueue: () -> Unit,
     onAddToPlaylist: (Long) -> Unit,
+    onInfo: () -> Unit = {},
+    onShare: () -> Unit = {},
+    onRename: () -> Unit = {},
     currentPlaylistId: Long? = null,
     onRemoveFromPlaylist: (() -> Unit)? = null,
     onDeletePermanently: (() -> Unit)? = null,
-    isDeleting: Boolean = false
+    isDeleting: Boolean = false,
+    isOperating: Boolean = false
 ) {
     val colors = AppThemeTokens.colors
     var menuExpanded by remember { mutableStateOf(false) }
@@ -743,6 +829,8 @@ fun SongRowItem(
                     onDismissRequest = { menuExpanded = false },
                     modifier = Modifier
                         .widthIn(min = 190.dp, max = 240.dp)
+                        .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.6f)
+                        .verticalScroll(rememberScrollState())
                         .shadow(elevation = 8.dp, shape = RoundedCornerShape(AppTokens.Radius16))
                         .background(colors.surface, shape = RoundedCornerShape(AppTokens.Radius16))
                 ) {
@@ -825,6 +913,65 @@ fun SongRowItem(
                             )
                         }
                     }
+
+                    // Info, Share, Rename — shown in every song row, including playlist detail
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = stringResource(R.string.action_info),
+                                color = colors.textPrimary,
+                                style = AppTypography.body
+                            )
+                        },
+                        onClick = { menuExpanded = false; onInfo() },
+                        enabled = !isOperating,
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = stringResource(R.string.action_info),
+                                tint = colors.textPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = stringResource(R.string.action_share),
+                                color = colors.textPrimary,
+                                style = AppTypography.body
+                            )
+                        },
+                        onClick = { menuExpanded = false; onShare() },
+                        enabled = !isOperating,
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = stringResource(R.string.action_share),
+                                tint = colors.textPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = stringResource(R.string.action_rename),
+                                color = colors.textPrimary,
+                                style = AppTypography.body
+                            )
+                        },
+                        onClick = { menuExpanded = false; onRename() },
+                        enabled = !isOperating,
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = stringResource(R.string.action_rename),
+                                tint = colors.textPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    )
 
                     // "Delete Permanently" as LAST item, separated by hairline divider (Never in playlist detail)
                     if (currentPlaylistId == null && onDeletePermanently != null) {
@@ -981,11 +1128,15 @@ fun CollectionDetailView(
     onShuffleAll: () -> Unit,
     onAddToQueue: (AudioTrack) -> Unit,
     onAddToPlaylist: (Long, AudioTrack) -> Unit,
+    onInfo: (AudioTrack) -> Unit = {},
+    onShare: (AudioTrack) -> Unit = {},
+    onRename: (AudioTrack) -> Unit = {},
     showBackButton: Boolean = true,
     currentPlaylistId: Long? = null,
     onRemoveFromPlaylist: ((AudioTrack) -> Unit)? = null,
     onDeletePermanently: ((AudioTrack) -> Unit)? = null,
-    isDeletingTrack: Boolean = false
+    isDeletingTrack: Boolean = false,
+    operatingTrackId: Long? = null
 ) {
     val colors = AppThemeTokens.colors
 

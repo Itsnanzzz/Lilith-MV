@@ -43,6 +43,14 @@ interface PlaylistDao {
 
     @Query("DELETE FROM playlist_songs WHERE audioUri = :audioUri")
     suspend fun removeSongFromAllPlaylists(audioUri: String): Int
+
+    @Query("UPDATE playlist_songs SET audioUri = :newUri, title = :newTitle WHERE audioUri = :oldUri")
+    suspend fun updateSongInAllPlaylists(oldUri: String, newUri: String, newTitle: String): Int
+
+    @Transaction
+    suspend fun migrateSongInAllPlaylists(oldUri: String, newUri: String, newTitle: String) {
+        updateSongInAllPlaylists(oldUri, newUri, newTitle)
+    }
 }
 
 @Dao

@@ -1,6 +1,7 @@
 package com.example.data.model
 
 import android.net.Uri
+import android.os.Build
 import java.io.File
 
 data class AudioTrack(
@@ -14,8 +15,45 @@ data class AudioTrack(
     val path: String = "",
     val folderName: String = "",
     val mimeType: String? = null,
-    val albumArtUri: String? = null
-)
+    val albumArtUri: String? = null,
+    val size: Long = 0L,
+    val displayName: String = "",
+    val dateAdded: Long = 0L,
+    val dateModified: Long = 0L,
+    val relativePath: String = ""
+) {
+    val extension: String
+        get() {
+            if (displayName.contains('.')) return displayName.substringAfterLast('.')
+            if (path.contains('.')) return path.substringAfterLast('.')
+            return ""
+        }
+
+    val fullDisplayName: String
+        get() {
+            if (displayName.isNotBlank()) return displayName
+            if (path.isNotBlank()) return File(path).name
+            val ext = extension
+            return if (ext.isNotEmpty()) "$title.$ext" else title
+        }
+
+    val baseName: String
+        get() {
+            if (displayName.isNotBlank() && displayName.contains('.')) return displayName.substringBeforeLast('.')
+            if (path.isNotBlank() && path.contains('.')) return File(path).nameWithoutExtension
+            return title
+        }
+
+    val folderPath: String
+        get() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && relativePath.isNotBlank()) {
+                val cleanRel = if (relativePath.endsWith('/')) relativePath else "$relativePath/"
+                return "$cleanRel$fullDisplayName"
+            }
+            if (path.isNotBlank()) return path
+            return fullDisplayName
+        }
+}
 
 data class VideoItem(
     val id: Long,
@@ -72,6 +110,14 @@ data class VideoExtraInfo(
     val audioCodec: String = "Unknown",
     val frameRate: String = "Unknown",
     val bitrate: String = "Unknown"
+)
+
+data class SongExtraInfo(
+    val codec: String = "Unknown",
+    val bitrate: String = "Unknown",
+    val sampleRate: String = "Unknown",
+    val bitDepth: String = "Unknown",
+    val channels: String = "Unknown"
 )
 
 data class AudioFormatInfo(
