@@ -57,6 +57,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
@@ -200,6 +201,21 @@ fun SettingsScreen(
                                 val swatchColor = accentColors.accent
                                 val onAccentColor = accentColors.onAccent
                                 val isWhiteSwatch = accent == AppAccent.WHITE
+                                val accentLabel = when (accent) {
+                                    AppAccent.WHITE -> stringResource(R.string.accent_white)
+                                    AppAccent.BLUE -> stringResource(R.string.accent_blue)
+                                    AppAccent.GREEN -> stringResource(R.string.accent_green)
+                                    AppAccent.YELLOW -> stringResource(R.string.accent_yellow)
+                                    AppAccent.RED -> stringResource(R.string.accent_red)
+                                    AppAccent.ORANGE -> stringResource(R.string.accent_orange)
+                                    AppAccent.PURPLE -> stringResource(R.string.accent_purple)
+                                    AppAccent.CYAN -> stringResource(R.string.accent_cyan)
+                                }
+                                val swatchContentDesc = if (isSelected) {
+                                    stringResource(R.string.accent_swatch_selected, accentLabel)
+                                } else {
+                                    accentLabel
+                                }
 
                                 Box(
                                     modifier = Modifier
@@ -209,12 +225,15 @@ fun SettingsScreen(
                                             role = Role.RadioButton,
                                             onClick = { viewModel.setAccentColor(accent) }
                                         )
-                                        .semantics { this.selected = isSelected }
+                                        .semantics {
+                                            this.selected = isSelected
+                                            this.contentDescription = swatchContentDesc
+                                        }
                                         .then(
                                             if (isSelected) {
                                                 Modifier.border(
                                                     width = 2.5.dp,
-                                                    color = if (isWhiteSwatch && !colors.isDark) colors.textPrimary else swatchColor,
+                                                    color = swatchColor,
                                                     shape = CircleShape
                                                 )
                                             } else Modifier
@@ -515,32 +534,63 @@ fun SettingsScreen(
 // PREVIEWS FOR ACCENT COLORS
 // =========================================================================
 
-@Preview(name = "Accent Blue Sample - Light", showBackground = true, backgroundColor = 0xFFFFFFFF)
+@Preview(name = "All Accents Sample - Light", showBackground = true, backgroundColor = 0xFFFFFFFF)
 @Composable
-fun PreviewAccentBlueLight() {
+fun PreviewAllAccentsLight() {
     LilithTheme(darkTheme = false, appAccent = AppAccent.BLUE) {
-        AccentSampleDemo()
+        AllAccentsSampleDemo(darkTheme = false)
     }
 }
 
-@Preview(name = "Accent Blue Sample - Dark", showBackground = true, backgroundColor = 0xFF0E1117)
+@Preview(name = "All Accents Sample - Dark", showBackground = true, backgroundColor = 0xFF0E1117)
 @Composable
-fun PreviewAccentBlueDark() {
+fun PreviewAllAccentsDark() {
     LilithTheme(darkTheme = true, appAccent = AppAccent.BLUE) {
-        AccentSampleDemo()
+        AllAccentsSampleDemo(darkTheme = true)
     }
 }
 
 @Composable
-private fun AccentSampleDemo() {
+private fun AllAccentsSampleDemo(darkTheme: Boolean) {
     val colors = AppThemeTokens.colors
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(colors.background)
             .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        AppAccent.entries.chunked(4).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                row.forEach { accent ->
+                    LilithTheme(darkTheme = darkTheme, appAccent = accent) {
+                        val themed = AppThemeTokens.colors
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(themed.accent)
+                                .then(
+                                    if (accent == AppAccent.WHITE) {
+                                        Modifier.border(1.dp, themed.hairline, CircleShape)
+                                    } else Modifier
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = themed.onAccent,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AppChip(text = "Selected", selected = true, onClick = {})
             AppChip(text = "Normal", selected = false, onClick = {})

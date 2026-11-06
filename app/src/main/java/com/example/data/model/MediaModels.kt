@@ -115,8 +115,6 @@ data class VideoExtraInfo(
 data class SongExtraInfo(
     val codec: String = "Unknown",
     val bitrate: String = "Unknown",
-    val sampleRate: String = "Unknown",
-    val bitDepth: String = "Unknown",
     val channels: String = "Unknown"
 )
 

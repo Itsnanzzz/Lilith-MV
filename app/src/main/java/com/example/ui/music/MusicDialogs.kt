@@ -606,7 +606,7 @@ fun DeletePermanentConfirmationDialog(
 
 /**
  * Flat Song Details Dialog:
- * Displays track metadata immediately and lazily loads codec/bitrate/sample rate/bit depth/channels.
+ * Displays track metadata immediately and lazily loads codec/bitrate/channels.
  * Long-press on Path copies it to clipboard and triggers onCopyPath.
  */
 @OptIn(ExperimentalFoundationApi::class)
@@ -665,7 +665,6 @@ fun SongInfoDialog(
                         .padding(vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    SongInfoDetailRow(label = stringResource(R.string.info_name), value = track.fullDisplayName)
                     SongInfoDetailRow(label = stringResource(R.string.info_title), value = track.title)
                     SongInfoDetailRow(label = stringResource(R.string.info_artist), value = track.artist)
                     SongInfoDetailRow(label = stringResource(R.string.info_album), value = track.album)
@@ -717,23 +716,9 @@ fun SongInfoDialog(
                         value = extraInfo?.bitrate ?: loadingText
                     )
                     SongInfoDetailRow(
-                        label = stringResource(R.string.info_sample_rate),
-                        value = extraInfo?.sampleRate ?: loadingText
-                    )
-                    SongInfoDetailRow(
-                        label = stringResource(R.string.info_bit_depth),
-                        value = extraInfo?.bitDepth ?: loadingText
-                    )
-                    SongInfoDetailRow(
                         label = stringResource(R.string.info_channels),
                         value = extraInfo?.channels ?: loadingText
                     )
-
-                    val addedStr = if (track.dateAdded > 0) TimeUtils.formatTimestamp(track.dateAdded) else unknownText
-                    SongInfoDetailRow(label = stringResource(R.string.info_date_added), value = addedStr)
-
-                    val modStr = if (track.dateModified > 0) TimeUtils.formatTimestamp(track.dateModified) else unknownText
-                    SongInfoDetailRow(label = stringResource(R.string.info_date_modified), value = modStr)
                 }
             }
         },

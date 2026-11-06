@@ -18,7 +18,6 @@ import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.core.content.ContextCompat
-import androidx.media3.common.C
 import com.example.R
 import com.example.data.model.AlbumItem
 import com.example.data.model.ArtistItem
@@ -871,8 +870,6 @@ class MediaRepository(private val context: Context) {
     suspend fun loadSongExtraInfo(track: AudioTrack): SongExtraInfo = withContext(Dispatchers.IO) {
         var codecStr = "Unknown"
         var bitrateStr = "Unknown"
-        var sampleRateStr = "Unknown"
-        var bitDepthStr = "Unknown"
         var channelsStr = "Unknown"
 
         var retriever: MediaMetadataRetriever? = null
@@ -927,14 +924,6 @@ class MediaRepository(private val context: Context) {
                     if (mime.startsWith("audio/")) {
                         codecStr = resolveCodecFriendlyName(mime)
 
-                        if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
-                            val sr = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-                            if (sr > 0) {
-                                val khz = sr / 1000.0
-                                sampleRateStr = if (khz % 1.0 == 0.0) "${khz.toInt()} kHz" else String.format(Locale.ROOT, "%.1f kHz", khz)
-                            }
-                        }
-
                         if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
                             val ch = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
                             channelsStr = when (ch) {
@@ -952,23 +941,6 @@ class MediaRepository(private val context: Context) {
                                 } else {
                                     String.format(Locale.ROOT, "%d kbps", br / 1000)
                                 }
-                            }
-                        }
-
-                        if (format.containsKey("pcm-encoding")) {
-                            val enc = format.getInteger("pcm-encoding")
-                            bitDepthStr = when (enc) {
-                                C.ENCODING_PCM_16BIT -> "16-bit"
-                                C.ENCODING_PCM_24BIT -> "24-bit"
-                                C.ENCODING_PCM_32BIT -> "32-bit"
-                                C.ENCODING_PCM_FLOAT -> "32-bit"
-                                else -> "Unknown"
-                            }
-                        }
-                        if (bitDepthStr == "Unknown") {
-                            val formatDetected = AudioFormatDetector.detectFromMime(mime)
-                            if (formatDetected.bitDepth > 0) {
-                                bitDepthStr = "${formatDetected.bitDepth}-bit"
                             }
                         }
                         break
@@ -1006,8 +978,6 @@ class MediaRepository(private val context: Context) {
         SongExtraInfo(
             codec = codecStr,
             bitrate = bitrateStr,
-            sampleRate = sampleRateStr,
-            bitDepth = bitDepthStr,
             channels = channelsStr
         )
     }

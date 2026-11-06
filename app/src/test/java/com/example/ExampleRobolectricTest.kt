@@ -39,16 +39,30 @@ import com.example.ui.music.MusicViewModel
 import com.example.ui.music.SongInfoDialog
 import com.example.ui.settings.SettingsScreen
 import com.example.ui.settings.SettingsViewModel
-import com.example.ui.theme.AccentBlue
-import com.example.ui.theme.AccentCyan
-import com.example.ui.theme.AccentGreen
-import com.example.ui.theme.AccentOrange
-import com.example.ui.theme.AccentPurple
-import com.example.ui.theme.AccentRed
-import com.example.ui.theme.AccentWhite
-import com.example.ui.theme.AccentYellow
 import com.example.ui.theme.AppThemeTokens
 import com.example.ui.theme.AppTokens
+import com.example.ui.theme.DarkAccentAmber
+import com.example.ui.theme.DarkAccentDefault
+import com.example.ui.theme.DarkAccentEmerald
+import com.example.ui.theme.DarkAccentOcean
+import com.example.ui.theme.DarkAccentRose
+import com.example.ui.theme.DarkAccentTangerine
+import com.example.ui.theme.DarkAccentTeal
+import com.example.ui.theme.DarkAccentViolet
+import com.example.ui.theme.LightAccentAmber
+import com.example.ui.theme.LightAccentAmberText
+import com.example.ui.theme.LightAccentDefault
+import com.example.ui.theme.LightAccentEmerald
+import com.example.ui.theme.LightAccentEmeraldText
+import com.example.ui.theme.LightAccentOcean
+import com.example.ui.theme.LightAccentOceanText
+import com.example.ui.theme.LightAccentRose
+import com.example.ui.theme.LightAccentRoseText
+import com.example.ui.theme.LightAccentTangerine
+import com.example.ui.theme.LightAccentTangerineText
+import com.example.ui.theme.LightAccentTeal
+import com.example.ui.theme.LightAccentTealText
+import com.example.ui.theme.LightAccentViolet
 import com.example.ui.theme.LilithTheme
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -213,8 +227,6 @@ class ExampleRobolectricTest {
                                 SongExtraInfo(
                                     codec = "FLAC",
                                     bitrate = "1411 kbps",
-                                    sampleRate = "44.1 kHz",
-                                    bitDepth = "16-bit",
                                     channels = "2 (Stereo)"
                                 )
                             }
@@ -224,16 +236,19 @@ class ExampleRobolectricTest {
             }
             composeTestRule.waitForIdle()
 
-            composeTestRule.onNodeWithText("Midnight_Echoes.flac").assertIsDisplayed()
             composeTestRule.onNodeWithText("Midnight Echoes").assertIsDisplayed()
             composeTestRule.onNodeWithText("Neon Skyline").assertIsDisplayed()
             composeTestRule.onNodeWithText("After Hours").assertIsDisplayed()
             composeTestRule.onNodeWithTag("song_info_path").performScrollTo().assertIsDisplayed()
             composeTestRule.onNodeWithText("FLAC").performScrollTo().assertIsDisplayed()
             composeTestRule.onNodeWithText("1411 kbps").performScrollTo().assertIsDisplayed()
-            composeTestRule.onNodeWithText("44.1 kHz").performScrollTo().assertIsDisplayed()
-            composeTestRule.onNodeWithText("16-bit").performScrollTo().assertIsDisplayed()
             composeTestRule.onNodeWithText("2 (Stereo)").performScrollTo().assertIsDisplayed()
+
+            composeTestRule.onNodeWithText("Name").assertDoesNotExist()
+            composeTestRule.onNodeWithText("Sample Rate").assertDoesNotExist()
+            composeTestRule.onNodeWithText("Bit Depth").assertDoesNotExist()
+            composeTestRule.onNodeWithText("Date Added").assertDoesNotExist()
+            composeTestRule.onNodeWithText("Date Modified").assertDoesNotExist()
 
             composeTestRule.onNodeWithTag("info_dialog_close_button").performClick()
             composeTestRule.waitForIdle()
@@ -510,52 +525,74 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `accent color palette matches exact user hex codes and syncs tokens`() {
-        val expectedHexByAccent = mapOf(
-            AppAccent.YELLOW to Color(0xFFFCCF03),
-            AppAccent.BLUE to Color(0xFF030FFC),
-            AppAccent.GREEN to Color(0xFF1DB954),
-            AppAccent.RED to Color(0xFFDB0E07),
-            AppAccent.ORANGE to Color(0xFFDB6D07),
-            AppAccent.PURPLE to Color(0xFF990DD1),
-            AppAccent.CYAN to Color(0xFF0DCBD1),
-            AppAccent.WHITE to Color(0xFFFFFFFF)
+    fun `accent color palette matches softer light and dark values and syncs tokens`() {
+        val expectedLightAccent = mapOf(
+            AppAccent.WHITE to LightAccentDefault,
+            AppAccent.BLUE to LightAccentOcean,
+            AppAccent.GREEN to LightAccentEmerald,
+            AppAccent.YELLOW to LightAccentAmber,
+            AppAccent.RED to LightAccentRose,
+            AppAccent.ORANGE to LightAccentTangerine,
+            AppAccent.PURPLE to LightAccentViolet,
+            AppAccent.CYAN to LightAccentTeal
+        )
+        val expectedLightOnAccent = mapOf(
+            AppAccent.WHITE to Color(0xFFFFFFFF),
+            AppAccent.BLUE to Color(0xFFFFFFFF),
+            AppAccent.GREEN to Color(0xFFFFFFFF),
+            AppAccent.YELLOW to Color(0xFF171C26),
+            AppAccent.RED to Color(0xFFFFFFFF),
+            AppAccent.ORANGE to Color(0xFFFFFFFF),
+            AppAccent.PURPLE to Color(0xFFFFFFFF),
+            AppAccent.CYAN to Color(0xFFFFFFFF)
+        )
+        val expectedLightAccentText = mapOf(
+            AppAccent.WHITE to LightAccentDefault,
+            AppAccent.BLUE to LightAccentOceanText,
+            AppAccent.GREEN to LightAccentEmeraldText,
+            AppAccent.YELLOW to LightAccentAmberText,
+            AppAccent.RED to LightAccentRoseText,
+            AppAccent.ORANGE to LightAccentTangerineText,
+            AppAccent.PURPLE to LightAccentViolet,
+            AppAccent.CYAN to LightAccentTealText
+        )
+        val expectedDarkAccent = mapOf(
+            AppAccent.WHITE to DarkAccentDefault,
+            AppAccent.BLUE to DarkAccentOcean,
+            AppAccent.GREEN to DarkAccentEmerald,
+            AppAccent.YELLOW to DarkAccentAmber,
+            AppAccent.RED to DarkAccentRose,
+            AppAccent.ORANGE to DarkAccentTangerine,
+            AppAccent.PURPLE to DarkAccentViolet,
+            AppAccent.CYAN to DarkAccentTeal
         )
 
         assertEquals(8, AppAccent.entries.size)
-        assertEquals(AccentYellow, expectedHexByAccent[AppAccent.YELLOW])
-        assertEquals(AccentBlue, expectedHexByAccent[AppAccent.BLUE])
-        assertEquals(AccentGreen, expectedHexByAccent[AppAccent.GREEN])
-        assertEquals(AccentRed, expectedHexByAccent[AppAccent.RED])
-        assertEquals(AccentOrange, expectedHexByAccent[AppAccent.ORANGE])
-        assertEquals(AccentPurple, expectedHexByAccent[AppAccent.PURPLE])
-        assertEquals(AccentCyan, expectedHexByAccent[AppAccent.CYAN])
-        assertEquals(AccentWhite, expectedHexByAccent[AppAccent.WHITE])
 
-        for (isDark in listOf(false, true)) {
-            for ((accent, expectedColor) in expectedHexByAccent) {
+        for (accent in AppAccent.entries) {
+            val darkAccent = expectedDarkAccent.getValue(accent)
+            val lightResolved = AppTokens.resolveAccentColors(accent, isDark = false)
+            assertEquals(expectedLightAccent.getValue(accent), lightResolved.accent)
+            assertEquals(expectedLightOnAccent.getValue(accent), lightResolved.onAccent)
+            assertEquals(expectedLightAccentText.getValue(accent), lightResolved.accentText)
+            assertEquals(darkAccent, lightResolved.miniPlayerProgress)
+
+            val darkResolved = AppTokens.resolveAccentColors(accent, isDark = true)
+            val expectedDarkOnAccent = if (accent == AppAccent.WHITE) Color(0xFF171C26) else Color(0xFF0E1117)
+            assertEquals(darkAccent, darkResolved.accent)
+            assertEquals(expectedDarkOnAccent, darkResolved.onAccent)
+            assertEquals(darkAccent, darkResolved.accentText)
+            assertEquals(darkAccent, darkResolved.miniPlayerProgress)
+
+            for (isDark in listOf(false, true)) {
                 val resolved = AppTokens.resolveAccentColors(accent, isDark)
-                assertEquals(
-                    "Unexpected accent hex for $accent (isDark=$isDark)",
-                    expectedColor,
-                    resolved.accent
-                )
-                assertEquals(
-                    "Unexpected miniPlayerProgress hex for $accent (isDark=$isDark)",
-                    expectedColor,
-                    resolved.miniPlayerProgress
-                )
-
                 val appColors = AppTokens.createColors(isDark = isDark, accent = accent)
-                assertEquals(expectedColor, appColors.accent)
-                assertEquals(expectedColor, appColors.primary)
+                assertEquals(resolved.accent, appColors.accent)
+                assertEquals(resolved.accent, appColors.primary)
                 assertEquals(resolved.onAccent, appColors.onPrimary)
-                assertEquals(!isDark && accent == AppAccent.WHITE, appColors.isLightWhiteAccent)
-                if (appColors.isLightWhiteAccent) {
-                    assertEquals(appColors.accentText, appColors.foregroundAccent)
-                } else {
-                    assertEquals(expectedColor, appColors.foregroundAccent)
-                }
+                assertEquals(darkAccent, appColors.miniPlayerProgress)
+                assertFalse(appColors.isLightWhiteAccent)
+                assertEquals(resolved.accent, appColors.foregroundAccent)
             }
         }
     }
@@ -593,66 +630,55 @@ class ExampleRobolectricTest {
             composeTestRule.waitForIdle()
 
             // Verify all 8 swatches are rendered
-            val expectedSwatches = listOf(
-                AppAccent.WHITE to Color(0xFFFFFFFF),
-                AppAccent.BLUE to Color(0xFF030FFC),
-                AppAccent.GREEN to Color(0xFF1DB954),
-                AppAccent.YELLOW to Color(0xFFFCCF03),
-                AppAccent.RED to Color(0xFFDB0E07),
-                AppAccent.ORANGE to Color(0xFFDB6D07),
-                AppAccent.PURPLE to Color(0xFF990DD1),
-                AppAccent.CYAN to Color(0xFF0DCBD1)
-            )
-
-            expectedSwatches.forEach { (accent, _) ->
+            AppAccent.entries.forEach { accent ->
                 composeTestRule.onNodeWithTag("accent_swatch_${accent.name.lowercase()}")
                     .performScrollTo()
                     .assertIsDisplayed()
             }
 
-            // Select Cyan (#0dcbd1) and verify label & theme tokens update
+            // Select Cyan (Teal) and verify label & theme tokens update
             composeTestRule.onNodeWithTag("accent_swatch_cyan")
                 .performScrollTo()
                 .performClick()
             waitForAccentState(settingsViewModel, AppAccent.CYAN)
 
-            composeTestRule.onNodeWithText("Cyan").performScrollTo().assertIsDisplayed()
-            assertEquals(Color(0xFF0DCBD1), observedAppAccent)
-            assertEquals(Color(0xFF0DCBD1), observedForegroundAccent)
-            assertEquals(Color(0xFF0DCBD1), observedMaterialPrimary)
+            composeTestRule.onNodeWithText("Teal").performScrollTo().assertIsDisplayed()
+            assertEquals(DarkAccentTeal, observedAppAccent)
+            assertEquals(DarkAccentTeal, observedForegroundAccent)
+            assertEquals(DarkAccentTeal, observedMaterialPrimary)
 
-            // Select Yellow (#fccf03) and verify label & theme tokens update
+            // Select Yellow (Amber) and verify label & theme tokens update
             composeTestRule.onNodeWithTag("accent_swatch_yellow")
                 .performScrollTo()
                 .performClick()
             waitForAccentState(settingsViewModel, AppAccent.YELLOW)
 
-            composeTestRule.onNodeWithText("Yellow").performScrollTo().assertIsDisplayed()
-            assertEquals(Color(0xFFFCCF03), observedAppAccent)
-            assertEquals(Color(0xFFFCCF03), observedForegroundAccent)
-            assertEquals(Color(0xFFFCCF03), observedMaterialPrimary)
+            composeTestRule.onNodeWithText("Amber").performScrollTo().assertIsDisplayed()
+            assertEquals(DarkAccentAmber, observedAppAccent)
+            assertEquals(DarkAccentAmber, observedForegroundAccent)
+            assertEquals(DarkAccentAmber, observedMaterialPrimary)
 
-            // Select Purple (#990dd1) and verify label & theme tokens update
+            // Select Purple (Violet) and verify label & theme tokens update
             composeTestRule.onNodeWithTag("accent_swatch_purple")
                 .performScrollTo()
                 .performClick()
             waitForAccentState(settingsViewModel, AppAccent.PURPLE)
 
-            composeTestRule.onNodeWithText("Purple").performScrollTo().assertIsDisplayed()
-            assertEquals(Color(0xFF990DD1), observedAppAccent)
-            assertEquals(Color(0xFF990DD1), observedForegroundAccent)
-            assertEquals(Color(0xFF990DD1), observedMaterialPrimary)
+            composeTestRule.onNodeWithText("Violet").performScrollTo().assertIsDisplayed()
+            assertEquals(DarkAccentViolet, observedAppAccent)
+            assertEquals(DarkAccentViolet, observedForegroundAccent)
+            assertEquals(DarkAccentViolet, observedMaterialPrimary)
 
-            // Restore White (#ffffff) default and verify
+            // Restore White default and verify
             composeTestRule.onNodeWithTag("accent_swatch_white")
                 .performScrollTo()
                 .performClick()
             waitForAccentState(settingsViewModel, AppAccent.WHITE)
 
             composeTestRule.onNodeWithText("White").performScrollTo().assertIsDisplayed()
-            assertEquals(Color(0xFFFFFFFF), observedAppAccent)
-            assertEquals(Color(0xFFFFFFFF), observedForegroundAccent)
-            assertEquals(Color(0xFFFFFFFF), observedMaterialPrimary)
+            assertEquals(DarkAccentDefault, observedAppAccent)
+            assertEquals(DarkAccentDefault, observedForegroundAccent)
+            assertEquals(DarkAccentDefault, observedMaterialPrimary)
         }
     }
 }
