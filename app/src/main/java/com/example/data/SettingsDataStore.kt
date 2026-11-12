@@ -21,6 +21,10 @@ enum class AppAccent {
     WHITE, BLUE, GREEN, YELLOW, RED, ORANGE, PURPLE, CYAN
 }
 
+enum class VideoViewMode {
+    LIST, GRID
+}
+
 
 class SettingsDataStore(private val context: Context) {
 
@@ -33,6 +37,7 @@ class SettingsDataStore(private val context: Context) {
         val SUBTITLE_FONT_SIZE = floatPreferencesKey("subtitle_font_size")
         val SUBTITLE_TEXT_COLOR = longPreferencesKey("subtitle_text_color")
         val SUBTITLE_BG_COLOR = longPreferencesKey("subtitle_bg_color")
+        val VIDEO_VIEW_MODE = stringPreferencesKey("video_view_mode")
     }
 
     val themeModeFlow: Flow<ThemeMode> = context.dataStore.data.map { preferences ->
@@ -74,6 +79,15 @@ class SettingsDataStore(private val context: Context) {
         )
     }
 
+    val videoViewModeFlow: Flow<VideoViewMode> = context.dataStore.data.map { preferences ->
+        val name = preferences[PreferencesKeys.VIDEO_VIEW_MODE] ?: VideoViewMode.LIST.name
+        try {
+            VideoViewMode.valueOf(name)
+        } catch (_: Exception) {
+            VideoViewMode.LIST
+        }
+    }
+
     suspend fun setThemeMode(mode: ThemeMode) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.THEME_MODE] = mode.name
@@ -109,6 +123,12 @@ class SettingsDataStore(private val context: Context) {
             preferences[PreferencesKeys.SUBTITLE_FONT_SIZE] = settings.fontSizeSp
             preferences[PreferencesKeys.SUBTITLE_TEXT_COLOR] = settings.textColorHex
             preferences[PreferencesKeys.SUBTITLE_BG_COLOR] = settings.backgroundColorHex
+        }
+    }
+
+    suspend fun setVideoViewMode(mode: VideoViewMode) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.VIDEO_VIEW_MODE] = mode.name
         }
     }
 }

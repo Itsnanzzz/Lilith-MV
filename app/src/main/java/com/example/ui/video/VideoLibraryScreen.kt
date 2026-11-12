@@ -7,10 +7,15 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -27,6 +32,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -67,33 +76,41 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.decode.VideoFrameDecoder
 import coil.request.ImageRequest
 import com.example.R
+import com.example.data.VideoViewMode
 import com.example.data.model.FolderItem
 import com.example.data.model.VideoItem
 import com.example.ui.common.TimeUtils
+import com.example.ui.navigation.LocalBottomContentPadding
 import com.example.ui.theme.AppChip
 import com.example.ui.theme.AppIconButton
 import com.example.ui.theme.AppSearchField
 import com.example.ui.theme.AppThemeTokens
 import com.example.ui.theme.AppTokens
 import com.example.ui.theme.AppTypography
-import com.example.ui.navigation.LocalBottomContentPadding
-import androidx.compose.ui.unit.Dp
 import com.example.ui.theme.LilithTheme
 import com.example.ui.theme.rememberIsAnimationDisabled
 import kotlinx.coroutines.launch
+import java.util.Locale
 import kotlin.math.abs
 
 /**
@@ -114,6 +131,8 @@ fun VideoLibraryScreen(
     val colors = AppThemeTokens.colors
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
+    val viewMode by viewModel.videoViewMode.collectAsState()
+    val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
     val isAnimationDisabled = rememberIsAnimationDisabled()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -225,9 +244,33 @@ fun VideoLibraryScreen(
 
     // Hoisted per-page scroll states keyed by folder name ("All" for page 0)
     val listStates = remember { mutableMapOf<String, LazyListState>() }
+    val gridStates = remember { mutableMapOf<String, LazyGridState>() }
     val activeKeys = remember(uiState.folders) { setOf("All") + uiState.folders.map { it.name } }
     LaunchedEffect(activeKeys) {
         listStates.keys.retainAll(activeKeys)
+        gridStates.keys.retainAll(activeKeys)
+    }
+
+    var previousViewMode by remember { mutableStateOf(viewMode) }
+    LaunchedEffect(viewMode) {
+        if (previousViewMode != viewMode) {
+            if (viewMode == VideoViewMode.GRID) {
+                listStates.forEach { (key, lState) ->
+                    gridStates.getOrPut(key) { LazyGridState() }.scrollToItem(
+                        lState.firstVisibleItemIndex,
+                        lState.firstVisibleItemScrollOffset
+                    )
+                }
+            } else {
+                gridStates.forEach { (key, gState) ->
+                    listStates.getOrPut(key) { LazyListState() }.scrollToItem(
+                        gState.firstVisibleItemIndex,
+                        gState.firstVisibleItemScrollOffset
+                    )
+                }
+            }
+            previousViewMode = viewMode
+        }
     }
 
     val onChipClick: (Int) -> Unit = { targetPage ->
@@ -326,7 +369,63 @@ fun VideoLibraryScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(2.dp))
+
+            // View toggle row: count text on start, list/grid toggle button on end
+            val currentPageVideos = remember(uiState.allVideos, uiState.folders, uiState.searchQuery, pagerState.currentPage) {
+                val folderVideos = if (pagerState.currentPage == 0) {
+                    uiState.allVideos
+                } else {
+                    val fName = uiState.folders.getOrNull(pagerState.currentPage - 1)?.name
+                    if (fName != null) uiState.allVideos.filter { it.folderName == fName } else emptyList()
+                }
+                if (uiState.searchQuery.isNotBlank()) {
+                    val q = uiState.searchQuery.lowercase()
+                    folderVideos.filter { it.title.lowercase().contains(q) }
+                } else {
+                    folderVideos
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp)
+                    .padding(horizontal = AppTokens.ScreenHorizontalPadding),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                val count = currentPageVideos.size
+                Text(
+                    text = pluralStringResource(R.plurals.videos_count, count, count),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                AppIconButton(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        viewModel.toggleViewMode()
+                    },
+                    painter = painterResource(
+                        if (viewMode == VideoViewMode.LIST) R.drawable.ic_view_grid
+                        else R.drawable.ic_view_list
+                    ),
+                    contentDescription = stringResource(
+                        if (viewMode == VideoViewMode.LIST) R.string.switch_to_grid_view
+                        else R.string.switch_to_list_view
+                    ),
+                    isTonalCircle = true,
+                    tintOverride = colors.textPrimary,
+                    iconSize = 20.dp,
+                    testTag = "video_view_toggle_button"
+                )
+            }
+
+            Spacer(modifier = Modifier.height(2.dp))
 
             // 3. Swipeable Horizontal Pager across folder pages
             Box(
@@ -355,6 +454,7 @@ fun VideoLibraryScreen(
                     ) { page ->
                         val pageKey = if (page == 0) "All" else uiState.folders.getOrNull(page - 1)?.name ?: "page_$page"
                         val listState = listStates.getOrPut(pageKey) { LazyListState() }
+                        val gridState = gridStates.getOrPut(pageKey) { LazyGridState() }
 
                         val displayVideos = remember(uiState.allVideos, uiState.folders, uiState.searchQuery, page) {
                             val folderVideos = if (page == 0) {
@@ -403,30 +503,74 @@ fun VideoLibraryScreen(
                                 }
                             }
                         } else {
-                            LazyColumn(
-                                state = listState,
-                                modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(
-                                    start = AppTokens.ScreenHorizontalPadding,
-                                    top = 6.dp,
-                                    end = AppTokens.ScreenHorizontalPadding,
-                                    bottom = 20.dp + bottomPadding
-                                ),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                items(
-                                    items = displayVideos,
-                                    key = { it.uri }
-                                ) { video ->
-                                    VideoCardItem(
-                                        video = video,
-                                        onClick = { onVideoSelected(video) },
-                                        isOperating = uiState.operatingVideoId == video.id,
-                                        onInfoClick = { viewModel.showInfo(video) },
-                                        onShareClick = { onShareVideo(video) },
-                                        onRenameClick = { viewModel.showRenameDialog(video) },
-                                        onDeleteClick = { viewModel.showDeleteDialog(video) }
-                                    )
+                            Crossfade(
+                                targetState = viewMode,
+                                animationSpec = if (isAnimationDisabled) snap() else tween(durationMillis = 200),
+                                label = "video_view_mode_crossfade"
+                            ) { mode ->
+                                if (mode == VideoViewMode.LIST) {
+                                    LazyColumn(
+                                        state = listState,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentPadding = PaddingValues(
+                                            start = AppTokens.ScreenHorizontalPadding,
+                                            top = 6.dp,
+                                            end = AppTokens.ScreenHorizontalPadding,
+                                            bottom = 20.dp + bottomPadding
+                                        ),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        items(
+                                            items = displayVideos,
+                                            key = { it.uri }
+                                        ) { video ->
+                                            VideoCardItem(
+                                                video = video,
+                                                onClick = { onVideoSelected(video) },
+                                                isOperating = uiState.operatingVideoId == video.id,
+                                                onInfoClick = { viewModel.showInfo(video) },
+                                                onShareClick = { onShareVideo(video) },
+                                                onRenameClick = { viewModel.showRenameDialog(video) },
+                                                onDeleteClick = { viewModel.showDeleteDialog(video) }
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                                        val columns = if (maxWidth < 600.dp) {
+                                            GridCells.Fixed(2)
+                                        } else {
+                                            GridCells.Adaptive(180.dp)
+                                        }
+                                        LazyVerticalGrid(
+                                            columns = columns,
+                                            state = gridState,
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentPadding = PaddingValues(
+                                                start = AppTokens.ScreenHorizontalPadding,
+                                                top = 6.dp,
+                                                end = AppTokens.ScreenHorizontalPadding,
+                                                bottom = 20.dp + bottomPadding
+                                            ),
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            items(
+                                                items = displayVideos,
+                                                key = { it.uri }
+                                            ) { video ->
+                                                VideoGridItem(
+                                                    video = video,
+                                                    onClick = { onVideoSelected(video) },
+                                                    isOperating = uiState.operatingVideoId == video.id,
+                                                    onInfoClick = { viewModel.showInfo(video) },
+                                                    onShareClick = { onShareVideo(video) },
+                                                    onRenameClick = { viewModel.showRenameDialog(video) },
+                                                    onDeleteClick = { viewModel.showDeleteDialog(video) }
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -487,6 +631,93 @@ fun VideoLibraryScreen(
 }
 
 /**
+ * Shared video thumbnail composable used by both list rows and grid cards.
+ * Renders 16:9 box with background placeholder, Coil video frame decoder, centered play circle,
+ * and duration badge pill at bottom-right.
+ */
+@Composable
+fun VideoThumbnail(
+    video: VideoItem,
+    modifier: Modifier = Modifier,
+    playCircleSize: Dp = 28.dp,
+    playIconSize: Dp = 16.dp,
+    playCircleAlpha: Float = 0.55f,
+    durationBadgeAlpha: Float = 0.68f,
+    durationFontSize: TextUnit = 10.sp,
+    durationPadding: Dp = 5.dp,
+    shape: Shape = RoundedCornerShape(AppTokens.Radius12)
+) {
+    val colors = AppThemeTokens.colors
+    val context = LocalContext.current
+
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(colors.surfaceMuted),
+        contentAlignment = Alignment.Center
+    ) {
+        // Background placeholder icon
+        Icon(
+            imageVector = Icons.Default.Videocam,
+            contentDescription = null,
+            tint = colors.textSecondary.copy(alpha = 0.4f),
+            modifier = Modifier.size(playCircleSize)
+        )
+
+        val targetUri = video.thumbnailUri?.takeIf { it.isNotBlank() } ?: video.uri
+        if (targetUri.isNotBlank()) {
+            val imageRequest = remember(targetUri) {
+                ImageRequest.Builder(context)
+                    .data(Uri.parse(targetUri))
+                    .decoderFactory(VideoFrameDecoder.Factory())
+                    .crossfade(true)
+                    .build()
+            }
+            AsyncImage(
+                model = imageRequest,
+                contentDescription = video.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        // Play icon overlay
+        Box(
+            modifier = Modifier
+                .size(playCircleSize)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = playCircleAlpha)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.PlayArrow,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(playIconSize)
+            )
+        }
+
+        // Duration badge at bottom right
+        if (video.durationMs > 0) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(durationPadding)
+                    .clip(RoundedCornerShape(AppTokens.RadiusPill))
+                    .background(Color.Black.copy(alpha = durationBadgeAlpha))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = TimeUtils.formatDuration(video.durationMs),
+                    color = Color.White,
+                    style = AppTypography.caption.copy(fontSize = durationFontSize, fontWeight = FontWeight.SemiBold)
+                )
+            }
+        }
+    }
+}
+
+/**
  * Clean Flat Video Row Item:
  * 16:9 thumbnail on the left (12dp radius) with duration badge, title & metadata in the middle,
  * and three-dot more options action menu on the right.
@@ -522,74 +753,19 @@ fun VideoCardItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Video Thumbnail on the LEFT (16:9 aspect ratio, 12dp rounded corners)
-            Box(
+            VideoThumbnail(
+                video = video,
                 modifier = Modifier
                     .width(124.dp)
-                    .aspectRatio(16f / 9f)
-                    .clip(RoundedCornerShape(AppTokens.Radius12))
-                    .background(colors.surfaceMuted),
-                contentAlignment = Alignment.Center
-            ) {
-                // Background placeholder icon
-                Icon(
-                    imageVector = Icons.Default.Videocam,
-                    contentDescription = null,
-                    tint = colors.textSecondary.copy(alpha = 0.4f),
-                    modifier = Modifier.size(28.dp)
-                )
-
-                val context = LocalContext.current
-                val targetUri = video.thumbnailUri?.takeIf { it.isNotBlank() } ?: video.uri
-                if (targetUri.isNotBlank()) {
-                    val imageRequest = remember(targetUri) {
-                        ImageRequest.Builder(context)
-                            .data(Uri.parse(targetUri))
-                            .decoderFactory(VideoFrameDecoder.Factory())
-                            .crossfade(true)
-                            .build()
-                    }
-                    AsyncImage(
-                        model = imageRequest,
-                        contentDescription = video.title,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-
-                // Play icon overlay
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.55f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-
-                // Duration badge at bottom right (dark pill with white 10sp text)
-                if (video.durationMs > 0) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(5.dp)
-                            .clip(RoundedCornerShape(AppTokens.RadiusPill))
-                            .background(Color.Black.copy(alpha = 0.68f))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = TimeUtils.formatDuration(video.durationMs),
-                            color = Color.White,
-                            style = AppTypography.caption.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-                        )
-                    }
-                }
-            }
+                    .aspectRatio(16f / 9f),
+                playCircleSize = 28.dp,
+                playIconSize = 16.dp,
+                playCircleAlpha = 0.55f,
+                durationBadgeAlpha = 0.68f,
+                durationFontSize = 10.sp,
+                durationPadding = 5.dp,
+                shape = RoundedCornerShape(AppTokens.Radius12)
+            )
 
             Spacer(modifier = Modifier.width(12.dp))
 
@@ -799,6 +975,98 @@ fun VideoRowTrailingMenu(
     }
 }
 
+/**
+ * 2-column video grid card item matching reference design:
+ * - surfaceMuted background card with 16dp radius and 1dp hairline border
+ * - 16:9 thumbnail filling the top (clipped by card top corners) with 36dp play circle and 11sp duration badge
+ * - Below thumbnail: 12dp padding with title (14sp SemiBold, 1 line ellipsis), subtitle (12sp textSecondary "1080p • MP4"),
+ *   and three-dot trailing menu button.
+ */
+@Composable
+fun VideoGridItem(
+    video: VideoItem,
+    onClick: () -> Unit,
+    isOperating: Boolean = false,
+    onInfoClick: () -> Unit = {},
+    onShareClick: () -> Unit = {},
+    onRenameClick: () -> Unit = {},
+    onDeleteClick: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    val colors = AppThemeTokens.colors
+    val cardShape = RoundedCornerShape(AppTokens.Radius16)
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(cardShape)
+            .background(colors.surfaceMuted, cardShape)
+            .border(1.dp, colors.hairline, cardShape)
+            .clickable(onClick = onClick)
+            .testTag("video_grid_item_${video.id}")
+    ) {
+        VideoThumbnail(
+            video = video,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f),
+            playCircleSize = 36.dp,
+            playIconSize = 20.dp,
+            playCircleAlpha = 0.55f,
+            durationBadgeAlpha = 0.60f,
+            durationFontSize = 11.sp,
+            durationPadding = 6.dp,
+            shape = RoundedCornerShape(topStart = AppTokens.Radius16, topEnd = AppTokens.Radius16)
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 12.dp, top = 6.dp, end = 4.dp, bottom = 12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = video.title,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+
+                VideoRowTrailingMenu(
+                    video = video,
+                    isOperating = isOperating,
+                    onInfoClick = onInfoClick,
+                    onShareClick = onShareClick,
+                    onRenameClick = onRenameClick,
+                    onDeleteClick = onDeleteClick
+                )
+            }
+
+            val subtitleText = remember(video.height, video.extension) {
+                val resolution = if (video.height > 0) "${video.height}p" else null
+                val ext = video.extension.takeIf { it.isNotBlank() }?.uppercase(Locale.ROOT)
+                listOfNotNull(resolution, ext).joinToString(" • ")
+            }
+            if (subtitleText.isNotEmpty()) {
+                Text(
+                    text = subtitleText,
+                    fontSize = 12.sp,
+                    color = colors.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+            }
+        }
+    }
+}
+
 @Preview(name = "Video Library - All Light", showBackground = true, backgroundColor = 0xFFFFFFFF)
 @Composable
 private fun VideoLibraryPreview() {
@@ -820,5 +1088,49 @@ private fun VideoLibraryPreview() {
             onRenameClick = {},
             onDeleteClick = {}
         )
+    }
+}
+
+@Preview(name = "Video Grid Item - Light", showBackground = true, backgroundColor = 0xFFFFFFFF)
+@Composable
+private fun VideoGridItemLightPreview() {
+    LilithTheme(darkTheme = false) {
+        Box(modifier = Modifier.width(180.dp).padding(8.dp)) {
+            VideoGridItem(
+                video = VideoItem(
+                    id = 1L,
+                    uri = "",
+                    title = "Sample Video Presentation 2024",
+                    durationMs = 125000L,
+                    width = 1920,
+                    height = 1080,
+                    folderName = "Camera",
+                    displayName = "Sample Video Presentation 2024.mp4"
+                ),
+                onClick = {}
+            )
+        }
+    }
+}
+
+@Preview(name = "Video Grid Item - Dark", showBackground = true, backgroundColor = 0xFF0E1117)
+@Composable
+private fun VideoGridItemDarkPreview() {
+    LilithTheme(darkTheme = true) {
+        Box(modifier = Modifier.width(180.dp).padding(8.dp)) {
+            VideoGridItem(
+                video = VideoItem(
+                    id = 1L,
+                    uri = "",
+                    title = "Sample Video Presentation 2024",
+                    durationMs = 125000L,
+                    width = 1920,
+                    height = 1080,
+                    folderName = "Camera",
+                    displayName = "Sample Video Presentation 2024.mp4"
+                ),
+                onClick = {}
+            )
+        }
     }
 }

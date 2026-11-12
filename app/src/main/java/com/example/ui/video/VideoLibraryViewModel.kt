@@ -14,16 +14,22 @@ import com.example.data.DeleteMediaResult
 import com.example.data.MediaRepository
 import com.example.data.MediaStoreSignature
 import com.example.data.RenameMediaResult
+import com.example.data.SettingsDataStore
+import com.example.data.VideoViewMode
 import com.example.data.model.FolderItem
 import com.example.data.model.VideoExtraInfo
 import com.example.data.model.VideoItem
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
@@ -55,6 +61,18 @@ class VideoLibraryViewModel(application: Application) : AndroidViewModel(applica
 
     private val repository = MediaRepository(application)
     private val database = (application as LilithApplication).database
+    private val settingsDataStore = SettingsDataStore(application)
+
+    private val initialViewMode: VideoViewMode = runCatching {
+        runBlocking { settingsDataStore.videoViewModeFlow.first() }
+    }.getOrDefault(VideoViewMode.LIST)
+
+    val videoViewMode: StateFlow<VideoViewMode> = settingsDataStore.videoViewModeFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = initialViewMode
+        )
 
     private val _uiState = MutableStateFlow(VideoLibraryUiState())
     val uiState: StateFlow<VideoLibraryUiState> = _uiState.asStateFlow()
@@ -74,6 +92,19 @@ class VideoLibraryViewModel(application: Application) : AndroidViewModel(applica
 
     init {
         scanVideos()
+    }
+
+    fun toggleViewMode() {
+        val nextMode = if (videoViewMode.value == VideoViewMode.LIST) VideoViewMode.GRID else VideoViewMode.LIST
+        viewModelScope.launch {
+            settingsDataStore.setVideoViewMode(nextMode)
+        }
+    }
+
+    fun setViewMode(mode: VideoViewMode) {
+        viewModelScope.launch {
+            settingsDataStore.setVideoViewMode(mode)
+        }
     }
 
     fun scanVideos() {
