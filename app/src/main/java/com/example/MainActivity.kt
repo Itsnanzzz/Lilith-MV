@@ -47,7 +47,14 @@ import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -58,9 +65,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.data.ForegroundMediaObserver
@@ -74,6 +83,8 @@ import com.example.ui.music.MiniPlayer
 import com.example.ui.music.MusicScreen
 import com.example.ui.music.MusicViewModel
 import com.example.ui.music.NowPlayingSheet
+import com.example.ui.navigation.FloatingBottomBar
+import com.example.ui.navigation.LocalBottomContentPadding
 import com.example.ui.navigation.UnifiedDockedBottomBar
 import com.example.ui.music.PlaybackSpeedDialog
 import com.example.ui.music.QueueSheet
@@ -344,6 +355,7 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MainAppContainer(
     musicViewModel: MusicViewModel,
@@ -430,6 +442,15 @@ fun MainAppContainer(
         }
     }
 
+    val density = LocalDensity.current
+    var floatingBarHeightDp by remember { mutableStateOf(0.dp) }
+    val isImeVisible = WindowInsets.isImeVisible
+    val effectiveBottomPadding = if (isImeVisible) 0.dp else floatingBarHeightDp
+    val statusBarTopInset = max(
+        WindowInsets.statusBars.asPaddingValues().calculateTopPadding(),
+        WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
+    )
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -438,9 +459,10 @@ fun MainAppContainer(
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = nc.background,
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             bottomBar = {
                 val showMiniPlayerTrack = if (!musicUiState.isNowPlayingExpanded) currentPlayingTrack else null
-                UnifiedDockedBottomBar(
+                FloatingBottomBar(
                     selectedTab = currentTab,
                     onTabSelected = {
                         currentTab = it
@@ -453,31 +475,43 @@ fun MainAppContainer(
                     formatInfo = formatInfo,
                     onTogglePlayPause = { musicViewModel.playerManager.togglePlayPause() },
                     onSkipNext = { musicViewModel.playerManager.skipToNext() },
-                    onClickMiniPlayer = { musicViewModel.setNowPlayingExpanded(true) }
+                    onClickMiniPlayer = { musicViewModel.setNowPlayingExpanded(true) },
+                    onHeightChanged = { px ->
+                        floatingBarHeightDp = with(density) { px.toDp() }
+                    }
                 )
             }
         ) { paddingValues ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-            ) {
-                when (currentTab) {
-                    MainNavigationTab.MUSIC -> {
-                        MusicScreen(viewModel = musicViewModel)
-                    }
+            CompositionLocalProvider(LocalBottomContentPadding provides effectiveBottomPadding) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = statusBarTopInset)
+                ) {
+                    when (currentTab) {
+                        MainNavigationTab.MUSIC -> {
+                            MusicScreen(
+                                viewModel = musicViewModel,
+                                bottomPadding = effectiveBottomPadding
+                            )
+                        }
 
-                    MainNavigationTab.VIDEO -> {
-                        VideoLibraryScreen(
-                            viewModel = videoLibraryViewModel,
-                            onVideoSelected = { video ->
-                                videoLibraryViewModel.playVideo(video)
-                            }
-                        )
-                    }
+                        MainNavigationTab.VIDEO -> {
+                            VideoLibraryScreen(
+                                viewModel = videoLibraryViewModel,
+                                onVideoSelected = { video ->
+                                    videoLibraryViewModel.playVideo(video)
+                                },
+                                bottomPadding = effectiveBottomPadding
+                            )
+                        }
 
-                    MainNavigationTab.SETTINGS -> {
-                        SettingsScreen(viewModel = settingsViewModel)
+                        MainNavigationTab.SETTINGS -> {
+                            SettingsScreen(
+                                viewModel = settingsViewModel,
+                                bottomPadding = effectiveBottomPadding
+                            )
+                        }
                     }
                 }
             }

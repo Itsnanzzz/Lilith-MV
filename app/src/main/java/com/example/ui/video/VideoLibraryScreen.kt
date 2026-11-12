@@ -89,6 +89,8 @@ import com.example.ui.theme.AppSearchField
 import com.example.ui.theme.AppThemeTokens
 import com.example.ui.theme.AppTokens
 import com.example.ui.theme.AppTypography
+import com.example.ui.navigation.LocalBottomContentPadding
+import androidx.compose.ui.unit.Dp
 import com.example.ui.theme.LilithTheme
 import com.example.ui.theme.rememberIsAnimationDisabled
 import kotlinx.coroutines.launch
@@ -106,7 +108,8 @@ import kotlin.math.abs
 fun VideoLibraryScreen(
     viewModel: VideoLibraryViewModel,
     onVideoSelected: (VideoItem) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    bottomPadding: Dp = LocalBottomContentPadding.current
 ) {
     val colors = AppThemeTokens.colors
     val context = LocalContext.current
@@ -245,6 +248,8 @@ fun VideoLibraryScreen(
             .testTag("video_library_screen")
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
+            Spacer(modifier = Modifier.height(6.dp))
+
             // 1. Search Bar & Action Buttons (Matches Music Tab Top Row)
             Row(
                 modifier = Modifier
@@ -405,7 +410,7 @@ fun VideoLibraryScreen(
                                     start = AppTokens.ScreenHorizontalPadding,
                                     top = 6.dp,
                                     end = AppTokens.ScreenHorizontalPadding,
-                                    bottom = 20.dp
+                                    bottom = 20.dp + bottomPadding
                                 ),
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
@@ -434,8 +439,7 @@ fun VideoLibraryScreen(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 12.dp),
+                .padding(bottom = bottomPadding + 12.dp, start = 20.dp, end = 20.dp),
             snackbar = { data ->
                 Snackbar(
                     snackbarData = data,

@@ -125,8 +125,10 @@ import com.example.ui.theme.AppSecondaryButton
 import com.example.ui.theme.AppThemeTokens
 import com.example.ui.theme.AppTokens
 import com.example.ui.theme.AppTypography
+import com.example.ui.navigation.LocalBottomContentPadding
 import com.example.ui.theme.LilithTheme
 import com.example.ui.theme.rememberIsAnimationDisabled
+import androidx.compose.ui.unit.Dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -134,7 +136,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun MusicScreen(
     viewModel: MusicViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    bottomPadding: Dp = LocalBottomContentPadding.current
 ) {
     val colors = AppThemeTokens.colors
     val context = LocalContext.current
@@ -605,12 +608,12 @@ fun MusicScreen(
             }
         }
 
-        // Floating Snackbar above bottom docked panel with 12dp radius and primary container
+        // Floating Snackbar above bottom floating bar with 12dp radius and primary container
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 76.dp, start = 20.dp, end = 20.dp),
+                .padding(bottom = bottomPadding + 12.dp, start = 20.dp, end = 20.dp),
             snackbar = { data ->
                 Snackbar(
                     snackbarData = data,
@@ -732,10 +735,11 @@ fun SongsListView(
             subtitle = stringResource(R.string.empty_music_list)
         )
     } else {
+        val bottomPadding = LocalBottomContentPadding.current
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, top = 6.dp, end = 20.dp, bottom = 24.dp),
+            contentPadding = PaddingValues(start = 20.dp, top = 6.dp, end = 20.dp, bottom = 24.dp + bottomPadding),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             items(
@@ -1309,10 +1313,11 @@ fun AlbumsGridView(
             subtitle = stringResource(R.string.empty_music_list)
         )
     } else {
+        val bottomPadding = LocalBottomContentPadding.current
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = 145.dp),
             state = gridState,
-            contentPadding = PaddingValues(20.dp),
+            contentPadding = PaddingValues(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 20.dp + bottomPadding),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxSize()
@@ -1377,10 +1382,11 @@ fun FoldersListView(
             subtitle = stringResource(R.string.empty_music_list)
         )
     } else {
+        val bottomPadding = LocalBottomContentPadding.current
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, top = 6.dp, end = 20.dp, bottom = 24.dp),
+            contentPadding = PaddingValues(start = 20.dp, top = 6.dp, end = 20.dp, bottom = 24.dp + bottomPadding),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             items(folders, key = { it.path }) { folder ->
@@ -1455,10 +1461,11 @@ fun PlaylistsView(
                 }
             )
         } else {
+            val bottomPadding = LocalBottomContentPadding.current
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 20.dp, top = 6.dp, end = 20.dp, bottom = 80.dp),
+                contentPadding = PaddingValues(start = 20.dp, top = 6.dp, end = 20.dp, bottom = 24.dp + bottomPadding),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 items(playlists, key = { it.id }) { playlist ->

@@ -62,6 +62,8 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.data.AppAccent
+import com.example.ui.navigation.LocalBottomContentPadding
+import androidx.compose.ui.unit.Dp
 
 /**
  * Clean, flat Settings Screen matching reference design:
@@ -75,7 +77,8 @@ import com.example.data.AppAccent
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    bottomPadding: Dp = LocalBottomContentPadding.current
 ) {
     val colors = AppThemeTokens.colors
     val themeMode by viewModel.themeMode.collectAsState()
@@ -518,7 +521,7 @@ fun SettingsScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(24.dp + bottomPadding))
     }
 
     if (showSubtitleStyleDialog) {
