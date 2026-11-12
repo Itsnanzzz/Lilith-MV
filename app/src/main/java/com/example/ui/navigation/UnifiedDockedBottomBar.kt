@@ -5,6 +5,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -13,7 +14,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -48,6 +48,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -95,8 +96,7 @@ val LocalBottomContentPadding = compositionLocalOf { 0.dp }
 private data class NavTabItem(
     val tab: MainNavigationTab,
     val stringResId: Int,
-    val itemTag: String,
-    val tabTag: String
+    val itemTag: String
 )
 
 /**
@@ -142,6 +142,12 @@ fun FloatingBottomBar(
     }
 
     val colorAnimSpec: AnimationSpec<Color> = if (isAnimationDisabled) {
+        snap()
+    } else {
+        tween(durationMillis = 200, easing = FastOutSlowInEasing)
+    }
+
+    val scaleAnimSpec: AnimationSpec<Float> = if (isAnimationDisabled) {
         snap()
     } else {
         tween(durationMillis = 200, easing = FastOutSlowInEasing)
@@ -367,9 +373,9 @@ fun FloatingBottomBar(
                 ) {
                     val tabs = remember {
                         listOf(
-                            NavTabItem(MainNavigationTab.MUSIC, R.string.nav_music, "nav_music_item", "nav_music_tab"),
-                            NavTabItem(MainNavigationTab.VIDEO, R.string.nav_video, "nav_video_item", "nav_video_tab"),
-                            NavTabItem(MainNavigationTab.SETTINGS, R.string.nav_settings, "nav_settings_item", "nav_settings_tab")
+                            NavTabItem(MainNavigationTab.MUSIC, R.string.nav_music, "nav_music_item"),
+                            NavTabItem(MainNavigationTab.VIDEO, R.string.nav_video, "nav_video_item"),
+                            NavTabItem(MainNavigationTab.SETTINGS, R.string.nav_settings, "nav_settings_item")
                         )
                     }
 
@@ -378,7 +384,7 @@ fun FloatingBottomBar(
                             .fillMaxSize(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        tabs.forEach { (tab, stringResId, itemTag, tabTag) ->
+                        tabs.forEach { (tab, stringResId, itemTag) ->
                             val isSelected = selectedTab == tab
                             val title = stringResource(stringResId)
 
@@ -396,11 +402,11 @@ fun FloatingBottomBar(
                                 label = "nav_icon_color_${tab.name}"
                             )
 
-                            // Selected: 40dp circular tonal container (accent at ~14% alpha), unselected: transparent
-                            val animatedContainerColor by animateColorAsState(
-                                targetValue = if (isSelected) colors.accent.copy(alpha = 0.14f) else Color.Transparent,
-                                animationSpec = colorAnimSpec,
-                                label = "nav_container_color_${tab.name}"
+                            // Selected: 1.0f scale, unselected: 0.92f scale (subtle, no bounce)
+                            val animatedScale by animateFloatAsState(
+                                targetValue = if (isSelected) 1.0f else 0.92f,
+                                animationSpec = scaleAnimSpec,
+                                label = "nav_icon_scale_${tab.name}"
                             )
 
                             Box(
@@ -427,21 +433,17 @@ fun FloatingBottomBar(
                                     .testTag(itemTag),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Box(
+                                Icon(
+                                    painter = painterResource(id = iconResId),
+                                    contentDescription = null,
+                                    tint = animatedIconColor,
                                     modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(animatedContainerColor)
-                                        .testTag(tabTag),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        painter = painterResource(id = iconResId),
-                                        contentDescription = null,
-                                        tint = animatedIconColor,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
+                                        .size(24.dp)
+                                        .graphicsLayer {
+                                            scaleX = animatedScale
+                                            scaleY = animatedScale
+                                        }
+                                )
                             }
                         }
                     }

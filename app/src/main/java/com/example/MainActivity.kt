@@ -21,11 +21,19 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileNotFoundException
 import java.util.Locale
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -61,9 +69,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -94,6 +104,7 @@ import com.example.ui.settings.SettingsViewModel
 import com.example.ui.theme.LilithTheme
 import com.example.ui.theme.LocalNeumorphicColors
 import com.example.ui.theme.NeumorphicFloatingBottomBar
+import com.example.ui.theme.rememberIsAnimationDisabled
 import com.example.ui.video.VideoLibraryScreen
 import com.example.ui.video.VideoLibraryViewModel
 import com.example.ui.video.VideoPlayerScreen
@@ -443,6 +454,8 @@ fun MainAppContainer(
     }
 
     val density = LocalDensity.current
+    val isAnimationDisabled = rememberIsAnimationDisabled()
+    val saveableStateHolder = rememberSaveableStateHolder()
     var floatingBarHeightDp by remember { mutableStateOf(0.dp) }
     val isImeVisible = WindowInsets.isImeVisible
     val effectiveBottomPadding = if (isImeVisible) 0.dp else floatingBarHeightDp
@@ -488,29 +501,78 @@ fun MainAppContainer(
                         .fillMaxSize()
                         .padding(top = statusBarTopInset)
                 ) {
-                    when (currentTab) {
-                        MainNavigationTab.MUSIC -> {
-                            MusicScreen(
-                                viewModel = musicViewModel,
-                                bottomPadding = effectiveBottomPadding
-                            )
-                        }
+                    AnimatedContent(
+                        targetState = currentTab,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clipToBounds(),
+                        transitionSpec = {
+                            if (isAnimationDisabled) {
+                                EnterTransition.None togetherWith ExitTransition.None
+                            } else {
+                                val isMovingRight = targetState.ordinal > initialState.ordinal
+                                val slideDistancePx = with(density) { 24.dp.roundToPx() }
+                                val initialOffset = if (isMovingRight) slideDistancePx else -slideDistancePx
+                                val targetOffset = if (isMovingRight) -slideDistancePx else slideDistancePx
 
-                        MainNavigationTab.VIDEO -> {
-                            VideoLibraryScreen(
-                                viewModel = videoLibraryViewModel,
-                                onVideoSelected = { video ->
-                                    videoLibraryViewModel.playVideo(video)
-                                },
-                                bottomPadding = effectiveBottomPadding
-                            )
-                        }
+                                val enter = slideInHorizontally(
+                                    animationSpec = tween(
+                                        durationMillis = 240,
+                                        easing = FastOutSlowInEasing
+                                    ),
+                                    initialOffsetX = { initialOffset }
+                                ) + fadeIn(
+                                    animationSpec = tween(
+                                        durationMillis = 160,
+                                        delayMillis = 80,
+                                        easing = FastOutSlowInEasing
+                                    )
+                                )
 
-                        MainNavigationTab.SETTINGS -> {
-                            SettingsScreen(
-                                viewModel = settingsViewModel,
-                                bottomPadding = effectiveBottomPadding
-                            )
+                                val exit = slideOutHorizontally(
+                                    animationSpec = tween(
+                                        durationMillis = 90,
+                                        easing = FastOutSlowInEasing
+                                    ),
+                                    targetOffsetX = { targetOffset }
+                                ) + fadeOut(
+                                    animationSpec = tween(
+                                        durationMillis = 90,
+                                        easing = FastOutSlowInEasing
+                                    )
+                                )
+
+                                enter togetherWith exit
+                            }
+                        },
+                        label = "tab_screen_transition"
+                    ) { tab ->
+                        saveableStateHolder.SaveableStateProvider(key = tab) {
+                            when (tab) {
+                                MainNavigationTab.MUSIC -> {
+                                    MusicScreen(
+                                        viewModel = musicViewModel,
+                                        bottomPadding = effectiveBottomPadding
+                                    )
+                                }
+
+                                MainNavigationTab.VIDEO -> {
+                                    VideoLibraryScreen(
+                                        viewModel = videoLibraryViewModel,
+                                        onVideoSelected = { video ->
+                                            videoLibraryViewModel.playVideo(video)
+                                        },
+                                        bottomPadding = effectiveBottomPadding
+                                    )
+                                }
+
+                                MainNavigationTab.SETTINGS -> {
+                                    SettingsScreen(
+                                        viewModel = settingsViewModel,
+                                        bottomPadding = effectiveBottomPadding
+                                    )
+                                }
+                            }
                         }
                     }
                 }

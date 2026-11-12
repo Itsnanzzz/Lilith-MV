@@ -55,6 +55,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -158,6 +159,87 @@ fun AppIconButton(
             ) {
                 Icon(
                     imageVector = icon,
+                    contentDescription = contentDescription,
+                    tint = iconColor,
+                    modifier = Modifier.size(iconSize)
+                )
+                if (isActive) {
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(4.dp)
+                            .clip(CircleShape)
+                            .background(colors.foregroundAccent)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AppIconButton(
+    onClick: () -> Unit,
+    painter: Painter,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    isTonalCircle: Boolean = false,
+    isActive: Boolean = false,
+    tintOverride: Color? = null,
+    iconSize: Dp = 22.dp,
+    testTag: String? = null
+) {
+    val colors = AppThemeTokens.colors
+    val isAnimationDisabled = rememberIsAnimationDisabled()
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    val scale by animateFloatAsState(
+        targetValue = if (!isAnimationDisabled && isPressed) 0.94f else 1.0f,
+        animationSpec = tween(durationMillis = AppTokens.AnimDurationShort),
+        label = "app_icon_button_scale"
+    )
+
+    val iconColor = tintOverride ?: when {
+        isActive -> colors.accentText
+        else -> colors.textSecondary
+    }
+
+    Box(
+        modifier = modifier
+            .size(48.dp)
+            .scale(scale)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                role = Role.Button,
+                onClick = onClick
+            )
+            .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isTonalCircle) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(colors.surfaceMuted),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painter,
+                    contentDescription = contentDescription,
+                    tint = iconColor,
+                    modifier = Modifier.size(iconSize)
+                )
+            }
+        } else {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    painter = painter,
                     contentDescription = contentDescription,
                     tint = iconColor,
                     modifier = Modifier.size(iconSize)
