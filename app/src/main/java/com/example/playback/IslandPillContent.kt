@@ -7,7 +7,6 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.snap
@@ -48,32 +47,22 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -84,15 +73,14 @@ import com.example.R
 import com.example.data.AppAccent
 import com.example.ui.common.MusicThumbnail
 import com.example.ui.common.TimeUtils
+import com.example.ui.common.WavyTrack
 import com.example.ui.theme.AppThemeTokens
 import com.example.ui.theme.LilithTheme
 import com.example.ui.theme.rememberIsAnimationDisabled
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
-import kotlin.math.PI
 import kotlin.math.roundToInt
-import kotlin.math.sin
 
 object IslandDimensions {
     val CompactWidth: Dp = 176.dp
@@ -636,11 +624,16 @@ private fun ExpandedPillBody(
         }
 
         key(state.mediaId, state.isPreviewSample) {
-            WavyProgressTrack(
+            WavyTrack(
                 progress = progressSnapshot.progress,
                 playing = state.isPlaying,
                 color = colors.accentText,
                 trackColor = colors.accentText.copy(alpha = 0.28f),
+                strokeWidth = 3.dp,
+                amplitude = 2.5.dp,
+                wavelength = 22.dp,
+                height = 14.dp,
+                visible = state.isExpanded,
                 stateDescriptionText = progressStateDesc,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -648,146 +641,6 @@ private fun ExpandedPillBody(
             )
         }
     }
-}
-
-@Composable
-fun WavyProgressTrack(
-    progress: Float,
-    playing: Boolean,
-    color: Color,
-    trackColor: Color,
-    modifier: Modifier = Modifier,
-    stateDescriptionText: String = ""
-) {
-    val isAnimationDisabled = rememberIsAnimationDisabled()
-    val targetProgress = progress.coerceIn(0f, 1f)
-
-    val progressState: State<Float> = if (isAnimationDisabled) {
-        rememberUpdatedState(targetProgress)
-    } else {
-        animateFloatAsState(
-            targetValue = targetProgress,
-            animationSpec = tween(durationMillis = 500, easing = LinearEasing),
-            label = "wavy_progress_fraction"
-        )
-    }
-
-    val amplitudeState: State<Float> = if (isAnimationDisabled) {
-        rememberUpdatedState(1f)
-    } else {
-        animateFloatAsState(
-            targetValue = if (playing) 1f else 0f,
-            animationSpec = tween(durationMillis = 250),
-            label = "wavy_progress_amplitude"
-        )
-    }
-
-    val frozenPhaseState = remember { mutableFloatStateOf(0f) }
-    val phaseState: State<Float> = if (playing && !isAnimationDisabled) {
-        val transition = rememberInfiniteTransition(label = "wavy_progress_phase_transition")
-        transition.animateFloat(
-            initialValue = 0f,
-            targetValue = (2.0 * PI).toFloat(),
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 1200, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart
-            ),
-            label = "wavy_progress_phase_rad"
-        )
-    } else {
-        frozenPhaseState
-    }
-
-    val wavePath = remember { Path() }
-
-    Spacer(
-        modifier = modifier
-            .height(14.dp)
-            .then(
-                if (stateDescriptionText.isNotEmpty()) {
-                    Modifier.semantics { stateDescription = stateDescriptionText }
-                } else {
-                    Modifier
-                }
-            )
-            .drawWithCache {
-                val strokePx = 3.dp.toPx()
-                val maxAmpPx = 2.5.dp.toPx()
-                val wavelengthPx = 22.dp.toPx()
-                val dotRadiusPx = 2.dp.toPx()
-                val waveStroke = Stroke(
-                    width = strokePx,
-                    cap = StrokeCap.Round,
-                    join = StrokeJoin.Round
-                )
-                val capInset = maxOf(strokePx / 2f, dotRadiusPx)
-                val startX = capInset
-                val endX = (size.width - capInset).coerceAtLeast(startX)
-                val usableWidth = (endX - startX).coerceAtLeast(0f)
-                val centerY = size.height / 2f
-                val twoPiOverLambda = ((2.0 * PI) / wavelengthPx.toDouble()).toFloat()
-                val stepPx = (wavelengthPx / 10f).coerceAtLeast(3f)
-
-                onDrawBehind {
-                    val clampedProgress = progressState.value.coerceIn(0f, 1f)
-                    val amp = maxAmpPx * amplitudeState.value.coerceIn(0f, 1f)
-                    val phase = phaseState.value
-                    if (playing && !isAnimationDisabled) {
-                        frozenPhaseState.floatValue = phase
-                    }
-
-                    val splitX = startX + usableWidth * clampedProgress
-
-                    // Remaining flat track and far-right 4dp dot
-                    if (clampedProgress < 1f && (endX - splitX) > 0.5f) {
-                        drawLine(
-                            color = trackColor,
-                            start = Offset(splitX, centerY),
-                            end = Offset(endX, centerY),
-                            strokeWidth = strokePx,
-                            cap = StrokeCap.Round
-                        )
-                    }
-                    if (clampedProgress < 0.995f && usableWidth > 0f) {
-                        drawCircle(
-                            color = trackColor,
-                            radius = dotRadiusPx,
-                            center = Offset(endX, centerY)
-                        )
-                    }
-
-                    // Played sine wave path
-                    val playedWidth = splitX - startX
-                    if (clampedProgress > 0f && playedWidth > 0.5f) {
-                        if (amp <= 0.05f) {
-                            drawLine(
-                                color = color,
-                                start = Offset(startX, centerY),
-                                end = Offset(splitX, centerY),
-                                strokeWidth = strokePx,
-                                cap = StrokeCap.Round
-                            )
-                        } else {
-                            wavePath.rewind()
-                            wavePath.moveTo(startX, centerY + amp * sin(-phase))
-                            var x = startX + stepPx
-                            while (x < splitX) {
-                                val y = centerY + amp * sin(twoPiOverLambda * (x - startX) - phase)
-                                wavePath.lineTo(x, y)
-                                x += stepPx
-                            }
-                            val endY = centerY + amp * sin(twoPiOverLambda * playedWidth - phase)
-                            wavePath.lineTo(splitX, endY)
-                            drawPath(
-                                path = wavePath,
-                                color = color,
-                                style = waveStroke
-                            )
-                        }
-                    }
-                }
-            }
-    )
 }
 
 // =========================================================================

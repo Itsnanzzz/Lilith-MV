@@ -489,6 +489,7 @@ fun MainAppContainer(
                     onTogglePlayPause = { musicViewModel.playerManager.togglePlayPause() },
                     onSkipNext = { musicViewModel.playerManager.skipToNext() },
                     onClickMiniPlayer = { musicViewModel.setNowPlayingExpanded(true) },
+                    isMiniPlayerVisible = videoLibUiState.activePlayingVideo == null && !musicUiState.isNowPlayingExpanded,
                     onHeightChanged = { px ->
                         floatingBarHeightDp = with(density) { px.toDp() }
                     }
@@ -604,6 +605,7 @@ fun MainAppContainer(
                 durationMs = musicDurationMs,
                 repeatMode = repeatMode,
                 shuffleEnabled = shuffleEnabled,
+                isTrackVisible = videoLibUiState.activePlayingVideo == null && musicUiState.isNowPlayingExpanded,
                 playbackSpeed = playbackSpeed,
                 formatInfo = formatInfo,
                 sleepTimerRemainingSec = sleepTimerSec,

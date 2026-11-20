@@ -52,6 +52,7 @@
     <string name="shuffle_off">Shuffle Off</string>
     <string name="shuffle_action">Shuffle</string>
     <string name="playback_speed">Playback Speed</string>
+    <string name="now_playing_seek_state_desc">%1$s of %2$s</string>
     <string name="sleep_timer">Sleep Timer</string>
     <string name="sleep_timer_off">Off</string>
     <string name="sleep_timer_minutes">%1$d Minutes</string>

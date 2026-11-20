@@ -41,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -77,6 +78,8 @@ import com.example.data.model.AudioFormatInfo
 import com.example.data.model.AudioTrack
 import com.example.ui.common.MediaFormatBadge
 import com.example.ui.common.MusicThumbnail
+import com.example.ui.common.TimeUtils
+import com.example.ui.common.WavyTrack
 import com.example.ui.theme.AppThemeTokens
 import com.example.ui.theme.AppTokens
 import com.example.ui.theme.LilithTheme
@@ -122,6 +125,7 @@ fun FloatingBottomBar(
     onSkipNext: () -> Unit,
     onClickMiniPlayer: () -> Unit,
     modifier: Modifier = Modifier,
+    isMiniPlayerVisible: Boolean = true,
     onHeightChanged: ((Int) -> Unit)? = null
 ) {
     val colors = AppThemeTokens.colors
@@ -226,7 +230,7 @@ fun FloatingBottomBar(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 // Album Art (~40dp, rounded 8dp)
@@ -323,22 +327,33 @@ fun FloatingBottomBar(
                                 }
                             }
 
-                            // Thin Progress Line (~2.5dp along bottom edge of card)
+                            // Thin Wavy Progress Track along bottom edge of card (+4.5dp card height total)
                             val progress = if (durationMs > 0) {
                                 (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
                             } else 0f
+                            val miniStateDesc = if (durationMs > 0) {
+                                stringResource(
+                                    R.string.now_playing_seek_state_desc,
+                                    TimeUtils.formatDuration(currentPositionMs),
+                                    TimeUtils.formatDuration(durationMs)
+                                )
+                            } else ""
 
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(2.5.dp)
-                                    .background(colors.miniPlayerTextSecondary.copy(alpha = 0.25f))
-                            ) {
-                                Box(
+                            key(currentTrack.id) {
+                                WavyTrack(
+                                    progress = progress,
+                                    playing = isPlaying,
+                                    color = colors.miniPlayerProgress,
+                                    trackColor = colors.miniPlayerProgress.copy(alpha = 0.28f),
+                                    strokeWidth = 2.dp,
+                                    amplitude = 1.5.dp,
+                                    wavelength = 16.dp,
+                                    height = 8.dp,
+                                    visible = isMiniPlayerVisible && !isImeVisible,
+                                    stateDescriptionText = miniStateDesc,
                                     modifier = Modifier
-                                        .fillMaxWidth(progress)
-                                        .fillMaxHeight()
-                                        .background(colors.miniPlayerProgress)
+                                        .fillMaxWidth()
+                                        .padding(start = 12.dp, end = 12.dp, bottom = 3.dp)
                                 )
                             }
                         }
@@ -469,6 +484,7 @@ fun UnifiedDockedBottomBar(
     onSkipNext: () -> Unit,
     onClickMiniPlayer: () -> Unit,
     modifier: Modifier = Modifier,
+    isMiniPlayerVisible: Boolean = true,
     onHeightChanged: ((Int) -> Unit)? = null
 ) {
     FloatingBottomBar(
@@ -483,6 +499,7 @@ fun UnifiedDockedBottomBar(
         onSkipNext = onSkipNext,
         onClickMiniPlayer = onClickMiniPlayer,
         modifier = modifier,
+        isMiniPlayerVisible = isMiniPlayerVisible,
         onHeightChanged = onHeightChanged
     )
 }

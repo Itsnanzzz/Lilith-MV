@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,6 +22,7 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +41,8 @@ import com.example.data.model.AudioFormatInfo
 import com.example.data.model.AudioTrack
 import com.example.ui.common.MediaFormatBadge
 import com.example.ui.common.MusicThumbnail
+import com.example.ui.common.TimeUtils
+import com.example.ui.common.WavyTrack
 import com.example.ui.theme.AppThemeTokens
 import com.example.ui.theme.AppTokens
 import com.example.ui.theme.LilithTheme
@@ -92,7 +94,7 @@ fun MiniPlayer(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Album Art (~40dp, rounded 8dp)
@@ -189,18 +191,29 @@ fun MiniPlayer(
                 }
             }
 
-            // Progress line along bottom edge of card
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(2.5.dp)
-                    .background(colors.miniPlayerTextSecondary.copy(alpha = 0.25f))
-            ) {
-                Box(
+            // Wavy progress track along bottom edge of card
+            val miniStateDesc = if (durationMs > 0) {
+                stringResource(
+                    R.string.now_playing_seek_state_desc,
+                    TimeUtils.formatDuration(currentPositionMs),
+                    TimeUtils.formatDuration(durationMs)
+                )
+            } else ""
+
+            key(currentTrack.id) {
+                WavyTrack(
+                    progress = progress,
+                    playing = isPlaying,
+                    color = colors.miniPlayerProgress,
+                    trackColor = colors.miniPlayerProgress.copy(alpha = 0.28f),
+                    strokeWidth = 2.dp,
+                    amplitude = 1.5.dp,
+                    wavelength = 16.dp,
+                    height = 8.dp,
+                    stateDescriptionText = miniStateDesc,
                     modifier = Modifier
-                        .fillMaxWidth(progress)
-                        .fillMaxHeight()
-                        .background(colors.miniPlayerProgress)
+                        .fillMaxWidth()
+                        .padding(start = 12.dp, end = 12.dp, bottom = 3.dp)
                 )
             }
         }

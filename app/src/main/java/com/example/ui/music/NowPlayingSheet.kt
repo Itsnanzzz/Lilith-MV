@@ -81,9 +81,9 @@ import com.example.data.model.AudioTrack
 import com.example.ui.common.MediaFormatBadge
 import com.example.ui.common.MusicThumbnail
 import com.example.ui.common.TimeUtils
+import com.example.ui.common.WavySeekBar
 import com.example.ui.theme.AppColors
 import com.example.ui.theme.AppIconButton
-import com.example.ui.theme.AppSlider
 import com.example.ui.theme.AppThemeTokens
 import com.example.ui.theme.AppTokens
 import com.example.ui.theme.AppTypography
@@ -96,7 +96,7 @@ import com.example.ui.theme.rememberIsAnimationDisabled
  * - Title: 22sp Bold centered with smooth marquee and soft fade edges
  * - Artist & Album: 15sp Medium centered
  * - Format Badge: codec, sample rate, bit depth centered below artist
- * - Seek Bar: flat AppSlider with 12sp tabular figures below (current left, duration right)
+ * - Seek Bar: wavy WavySeekBar with 12sp tabular figures below (current left, duration right)
  * - Controls row: Shuffle, Previous, giant 72dp filled primary circle Play/Pause button, Next, Repeat
  * - Subtle secondary chips for Speed, Sleep Timer, and Equalizer
  */
@@ -118,6 +118,7 @@ fun NowPlayingSheet(
     onToggleShuffle: () -> Unit,
     onOpenQueueSheet: () -> Unit,
     modifier: Modifier = Modifier,
+    isTrackVisible: Boolean = true,
     playbackSpeed: Float = 1.0f,
     sleepTimerRemainingSec: Int = 0,
     onOpenSpeedDialog: () -> Unit = {},
@@ -237,24 +238,33 @@ fun NowPlayingSheet(
 
             Spacer(modifier = Modifier.height(spacingLarge))
 
-            // 5. Seek Bar (Flat AppSlider)
+            // 5. Seek Bar (Wavy Seek Bar)
             val maxDuration = durationMs.coerceAtLeast(1L).toFloat()
             val sliderFraction = (displayPositionMs.toFloat() / maxDuration).coerceIn(0f, 1f)
-
-            AppSlider(
-                value = sliderFraction,
-                onValueChange = { frac ->
-                    isDraggingSlider = true
-                    dragPositionMs = frac * maxDuration
-                },
-                onValueChangeFinished = {
-                    onSeek(dragPositionMs.toLong())
-                    isDraggingSlider = false
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("now_playing_slider")
+            val seekStateDesc = stringResource(
+                R.string.now_playing_seek_state_desc,
+                TimeUtils.formatDuration(displayPositionMs),
+                TimeUtils.formatDuration(durationMs)
             )
+
+            key(track.id) {
+                WavySeekBar(
+                    value = sliderFraction,
+                    playing = isPlaying,
+                    onValueChange = { frac ->
+                        isDraggingSlider = true
+                        dragPositionMs = frac * maxDuration
+                    },
+                    onValueChangeFinished = {
+                        onSeek(dragPositionMs.toLong())
+                        isDraggingSlider = false
+                    },
+                    visible = isTrackVisible,
+                    stateDescriptionText = seekStateDesc,
+                    testTag = "now_playing_slider",
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
 
             // Timestamps: Elapsed and Duration (12sp tabular figures)
             Row(
