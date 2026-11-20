@@ -284,4 +284,31 @@
         <item quantity="one">%1$d video</item>
         <item quantity="other">%1$d videos</item>
     </plurals>
+
+    <!-- Experimental Dynamic Island -->
+    <string name="settings_experimental">Experimental</string>
+    <string name="settings_dynamic_island">Dynamic Island</string>
+    <string name="settings_island_on">On</string>
+    <string name="settings_island_off">Off</string>
+    <string name="settings_dynamic_island_desc">Shows a floating player at the top of the screen while music plays. Needs permission to display over other apps.</string>
+    <string name="settings_dynamic_island_xiaomi_hint">On some phones (for example Xiaomi) also allow \"Display pop-up windows while running in the background\" in the app\'s system settings</string>
+    <string name="settings_open_app_settings">Open app settings</string>
+    <string name="settings_island_visibility">Visibility</string>
+    <string name="settings_island_visibility_briefly">Briefly</string>
+    <string name="settings_island_visibility_always">While playing</string>
+    <string name="settings_island_position">Position</string>
+    <string name="settings_island_position_below_status">Below status bar</string>
+    <string name="settings_island_position_around_camera">Around camera</string>
+    <string name="settings_island_preview">Preview</string>
+    <string name="island_permission_title">Display over other apps</string>
+    <string name="island_permission_message">Lilith MV needs permission to display over other apps so the Dynamic Island can float at the top of your screen while you use other apps.</string>
+    <string name="island_permission_open_settings">Open settings</string>
+    <string name="island_permission_not_granted">Permission not granted</string>
+    <string name="island_error_turned_off">Dynamic Island turned off: couldn\'t display</string>
+    <string name="island_now_playing_desc">Now playing, %1$s, %2$s</string>
+    <string name="island_artwork_desc">Album artwork</string>
+    <string name="island_progress_state_desc">Progress %1$s of %2$s</string>
+    <string name="island_progress_percent_desc">Progress %1$d%%</string>
+    <string name="island_preview_sample_title">Midnight Echoes</string>
+    <string name="island_preview_sample_artist">Lilith Studio</string>
 </resources>

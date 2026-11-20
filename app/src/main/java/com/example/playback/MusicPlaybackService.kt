@@ -4,6 +4,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -26,6 +27,7 @@ import androidx.media3.session.SessionResult
 import com.example.LilithApplication
 import com.example.MainActivity
 import com.example.R
+import com.example.data.SettingsDataStore
 import com.example.data.model.AudioFormatInfo
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -36,6 +38,8 @@ class MusicPlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     lateinit var player: ExoPlayer
         private set
+
+    private var islandOverlayController: IslandOverlayController? = null
 
     val equalizerController: EqualizerController
         get() = EqualizerController.getInstance(this)
@@ -126,6 +130,13 @@ class MusicPlaybackService : MediaSessionService() {
             .setSessionActivity(sessionActivityPendingIntent)
             .build()
 
+        islandOverlayController = IslandOverlayController(
+            service = this,
+            playerProvider = { if (::player.isInitialized) player else null },
+            mediaSessionProvider = { mediaSession },
+            settingsDataStore = SettingsDataStore(applicationContext)
+        ).also { it.start() }
+
         serviceInstance = this
     }
 
@@ -133,8 +144,20 @@ class MusicPlaybackService : MediaSessionService() {
         return mediaSession
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        islandOverlayController?.onConfigurationChanged(newConfig)
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        islandOverlayController?.onTaskRemoved()
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
         serviceInstance = null
+        islandOverlayController?.release()
+        islandOverlayController = null
         equalizerController.release()
         mediaSession?.run {
             player.release()

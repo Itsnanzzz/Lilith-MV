@@ -10,17 +10,24 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -28,11 +35,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -101,6 +110,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -133,6 +143,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MusicScreen(
     viewModel: MusicViewModel,
@@ -269,6 +280,12 @@ fun MusicScreen(
         }
     }
 
+    val selectedTabIndex = if (pagerState.isScrollInProgress) {
+        pagerState.currentPage
+    } else {
+        pagerState.settledPage
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -330,12 +347,6 @@ fun MusicScreen(
                 MusicTab.FOLDERS to stringResource(R.string.tab_folders),
                 MusicTab.PLAYLISTS to stringResource(R.string.tab_playlists)
             )
-
-            val selectedTabIndex = if (pagerState.isScrollInProgress) {
-                pagerState.currentPage
-            } else {
-                pagerState.settledPage
-            }
 
             val onTabClick: (Int, MusicTab) -> Unit = { pageIndex, tab ->
                 val isSelected = selectedTabIndex == pageIndex
@@ -608,12 +619,46 @@ fun MusicScreen(
             }
         }
 
-        // Floating Snackbar above bottom floating bar with 12dp radius and primary container
+        val isImeVisible = WindowInsets.isImeVisible
+        val showCreatePlaylistFab = !uiState.isScanning &&
+            selectedTabIndex == 3 &&
+            uiState.selectedPlaylist == null &&
+            !isImeVisible
+
+        // Floating Create Playlist button anchored above the floating bottom group (Playlists page only)
+        AnimatedVisibility(
+            visible = showCreatePlaylistFab,
+            enter = fadeIn(
+                animationSpec = if (isAnimationDisabled) snap() else tween(durationMillis = 150)
+            ),
+            exit = fadeOut(
+                animationSpec = if (isAnimationDisabled) snap() else tween(durationMillis = 150)
+            ),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = bottomPadding + 16.dp)
+        ) {
+            CreatePlaylistFab(
+                onClick = { viewModel.setCreatePlaylistDialogVisible(true) }
+            )
+        }
+
+        val snackbarFabClearance by animateDpAsState(
+            targetValue = if (showCreatePlaylistFab) 56.dp + 16.dp else 0.dp,
+            animationSpec = if (isAnimationDisabled) {
+                snap()
+            } else {
+                tween(durationMillis = 200, easing = FastOutSlowInEasing)
+            },
+            label = "snackbar_fab_clearance"
+        )
+
+        // Floating Snackbar above bottom floating bar (and above Create Playlist FAB when both show)
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = bottomPadding + 12.dp, start = 20.dp, end = 20.dp),
+                .padding(bottom = bottomPadding + snackbarFabClearance + 12.dp, start = 20.dp, end = 20.dp),
             snackbar = { data ->
                 Snackbar(
                     snackbarData = data,
@@ -1436,6 +1481,7 @@ fun FoldersListView(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PlaylistsView(
     playlists: List<PlaylistEntity>,
@@ -1445,13 +1491,17 @@ fun PlaylistsView(
     onCreatePlaylist: () -> Unit
 ) {
     val colors = AppThemeTokens.colors
+    val bottomPadding = LocalBottomContentPadding.current
+    val isImeVisible = WindowInsets.isImeVisible
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (playlists.isEmpty()) {
+            val emptyBottomPadding = if (isImeVisible) 0.dp else bottomPadding + 16.dp + 56.dp + 16.dp
             EmptyStateView(
                 icon = Icons.Default.PlaylistPlay,
                 title = stringResource(R.string.playlist_none_title),
                 subtitle = stringResource(R.string.playlist_none_subtitle),
+                modifier = Modifier.padding(bottom = emptyBottomPadding),
                 actionButton = {
                     AppPrimaryButton(
                         text = stringResource(R.string.playlist_create),
@@ -1461,11 +1511,15 @@ fun PlaylistsView(
                 }
             )
         } else {
-            val bottomPadding = LocalBottomContentPadding.current
+            val listBottomPadding = if (isImeVisible) {
+                24.dp
+            } else {
+                bottomPadding + 16.dp + 56.dp + 16.dp
+            }
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 20.dp, top = 6.dp, end = 20.dp, bottom = 24.dp + bottomPadding),
+                contentPadding = PaddingValues(start = 20.dp, top = 6.dp, end = 20.dp, bottom = listBottomPadding),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 items(playlists, key = { it.id }) { playlist ->
@@ -1515,35 +1569,43 @@ fun PlaylistsView(
                 }
             }
         }
+    }
+}
 
-        // Circular Flat FAB for Playlist Creation
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(bottom = 24.dp, end = 20.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .background(colors.accent)
-                    .then(
-                        if (colors.isLightWhiteAccent) {
-                            Modifier.border(1.dp, colors.hairline, CircleShape)
-                        } else Modifier
-                    )
-                    .clickable(onClick = onCreatePlaylist)
-                    .testTag("create_playlist_fab"),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = stringResource(R.string.playlist_create),
-                    tint = colors.onAccent,
-                    modifier = Modifier.size(26.dp)
-                )
-            }
-        }
+@Composable
+private fun CreatePlaylistFab(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = AppThemeTokens.colors
+    Box(
+        modifier = modifier
+            .size(56.dp)
+            .shadow(
+                elevation = 5.dp,
+                shape = CircleShape,
+                clip = false
+            )
+            .clip(CircleShape)
+            .background(colors.accent, CircleShape)
+            .then(
+                if (colors.isLightWhiteAccent) {
+                    Modifier.border(1.dp, colors.hairline, CircleShape)
+                } else Modifier
+            )
+            .clickable(
+                role = Role.Button,
+                onClick = onClick
+            )
+            .testTag("create_playlist_fab"),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Add,
+            contentDescription = stringResource(R.string.playlist_create),
+            tint = colors.onAccent,
+            modifier = Modifier.size(24.dp)
+        )
     }
 }
 

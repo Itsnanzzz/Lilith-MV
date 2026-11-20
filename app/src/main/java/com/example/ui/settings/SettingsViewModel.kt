@@ -1,12 +1,17 @@
 package com.example.ui.settings
 
 import android.app.Application
+import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.AppAccent
+import com.example.data.DynamicIslandBridge
+import com.example.data.IslandPosition
+import com.example.data.IslandVisibility
 import com.example.data.SettingsDataStore
 import com.example.data.ThemeMode
 import com.example.data.model.SubtitleSettings
+import com.example.playback.MusicPlaybackService
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -33,6 +38,15 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     val subtitleSettings: StateFlow<SubtitleSettings> = settingsDataStore.subtitleSettingsFlow
         .stateIn(viewModelScope, SharingStarted.Lazily, SubtitleSettings())
+
+    val islandEnabled: StateFlow<Boolean> = settingsDataStore.islandEnabledFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val islandVisibility: StateFlow<IslandVisibility> = settingsDataStore.islandVisibilityFlow
+        .stateIn(viewModelScope, SharingStarted.Lazily, IslandVisibility.BRIEFLY)
+
+    val islandPosition: StateFlow<IslandPosition> = settingsDataStore.islandPositionFlow
+        .stateIn(viewModelScope, SharingStarted.Lazily, IslandPosition.BELOW_STATUS_BAR)
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
@@ -67,6 +81,41 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun updateSubtitleSettings(settings: SubtitleSettings) {
         viewModelScope.launch {
             settingsDataStore.updateSubtitleSettings(settings)
+        }
+    }
+
+    fun setIslandEnabled(enabled: Boolean) {
+        if (enabled) {
+            ensurePlaybackServiceStarted()
+        }
+        viewModelScope.launch {
+            settingsDataStore.setIslandEnabled(enabled)
+        }
+    }
+
+    fun setIslandVisibility(visibility: IslandVisibility) {
+        viewModelScope.launch {
+            settingsDataStore.setIslandVisibility(visibility)
+        }
+    }
+
+    fun setIslandPosition(position: IslandPosition) {
+        viewModelScope.launch {
+            settingsDataStore.setIslandPosition(position)
+        }
+    }
+
+    fun triggerIslandPreview() {
+        ensurePlaybackServiceStarted()
+        DynamicIslandBridge.triggerPreview()
+    }
+
+    private fun ensurePlaybackServiceStarted() {
+        if (MusicPlaybackService.serviceInstance != null) return
+        try {
+            val app = getApplication<Application>()
+            app.startService(Intent(app, MusicPlaybackService::class.java))
+        } catch (_: Exception) {
         }
     }
 }

@@ -1,6 +1,11 @@
 package com.example.ui.settings
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,34 +19,61 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.R
+import com.example.data.AppAccent
+import com.example.data.DynamicIslandBridge
+import com.example.data.IslandPosition
+import com.example.data.IslandVisibility
 import com.example.data.ThemeMode
+import com.example.ui.navigation.LocalBottomContentPadding
 import com.example.ui.theme.AppChip
 import com.example.ui.theme.AppPrimaryButton
 import com.example.ui.theme.AppSecondaryButton
@@ -52,18 +84,7 @@ import com.example.ui.theme.AppTokens
 import com.example.ui.theme.AppTypography
 import com.example.ui.theme.LilithTheme
 import com.example.ui.video.SubtitleSettingsDialog
-import androidx.compose.foundation.border
-import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.tooling.preview.Preview
-import com.example.data.AppAccent
-import com.example.ui.navigation.LocalBottomContentPadding
-import androidx.compose.ui.unit.Dp
+import kotlinx.coroutines.launch
 
 /**
  * Clean, flat Settings Screen matching reference design:
@@ -81,23 +102,76 @@ fun SettingsScreen(
     bottomPadding: Dp = LocalBottomContentPadding.current
 ) {
     val colors = AppThemeTokens.colors
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
     val themeMode by viewModel.themeMode.collectAsState()
     val appAccent by viewModel.appAccent.collectAsState()
     val gapless by viewModel.gaplessPlayback.collectAsState()
     val pauseOnHeadset by viewModel.pauseOnHeadsetUnplug.collectAsState()
     val subtitleLang by viewModel.preferredSubtitleLanguage.collectAsState()
     val subtitleSettings by viewModel.subtitleSettings.collectAsState()
+    val islandEnabled by viewModel.islandEnabled.collectAsState()
+    val islandVisibility by viewModel.islandVisibility.collectAsState()
+    val islandPosition by viewModel.islandPosition.collectAsState()
 
     var showSubtitleStyleDialog by remember { mutableStateOf(false) }
+    var showOverlayPermissionDialog by remember { mutableStateOf(false) }
+    var awaitingOverlayPermission by remember { mutableStateOf(false) }
 
-    Column(
+    val permissionNotGrantedMessage = stringResource(R.string.island_permission_not_granted)
+
+    LaunchedEffect(Unit) {
+        DynamicIslandBridge.errorMessages.collect { errorMsg ->
+            snackbarHostState.showSnackbar(
+                message = errorMsg,
+                duration = SnackbarDuration.Short
+            )
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, islandEnabled, awaitingOverlayPermission) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val canDraw = Settings.canDrawOverlays(context)
+                if (awaitingOverlayPermission) {
+                    awaitingOverlayPermission = false
+                    if (canDraw) {
+                        viewModel.setIslandEnabled(true)
+                    } else {
+                        viewModel.setIslandEnabled(false)
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar(
+                                message = permissionNotGrantedMessage,
+                                duration = SnackbarDuration.Short
+                            )
+                        }
+                    }
+                } else if (islandEnabled && !canDraw) {
+                    viewModel.setIslandEnabled(false)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    Box(
         modifier = modifier
             .fillMaxSize()
             .background(colors.background)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = AppTokens.ScreenHorizontalPadding, vertical = 16.dp)
-            .testTag("settings_screen")
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = AppTokens.ScreenHorizontalPadding, vertical = 16.dp)
+                .testTag("settings_screen")
+        ) {
         Text(
             text = stringResource(R.string.settings_title),
             style = AppTypography.screenTitle,
@@ -480,7 +554,195 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // 5. About App Card
+        // 5. Experimental (Dynamic Island) Card
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(AppTokens.Radius16))
+                .background(colors.surfaceMuted)
+                .padding(16.dp)
+                .testTag("experimental_settings_card")
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = colors.accentText,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = stringResource(R.string.settings_experimental),
+                        style = AppTypography.listTitle,
+                        color = colors.textPrimary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                val onDynamicIslandToggle: (Boolean) -> Unit = { checked ->
+                    if (!checked) {
+                        viewModel.setIslandEnabled(false)
+                    } else if (Settings.canDrawOverlays(context)) {
+                        viewModel.setIslandEnabled(true)
+                    } else {
+                        showOverlayPermissionDialog = true
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(AppTokens.Radius12))
+                        .clickable(role = Role.Switch) {
+                            onDynamicIslandToggle(!islandEnabled)
+                        }
+                        .padding(vertical = 4.dp)
+                        .testTag("dynamic_island_toggle_row"),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 12.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = stringResource(R.string.settings_dynamic_island),
+                                style = AppTypography.listTitle.copy(fontSize = 14.sp),
+                                color = colors.textPrimary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = stringResource(
+                                    if (islandEnabled) R.string.settings_island_on else R.string.settings_island_off
+                                ),
+                                style = AppTypography.caption.copy(
+                                    fontWeight = if (islandEnabled) FontWeight.SemiBold else FontWeight.Medium
+                                ),
+                                color = if (islandEnabled) colors.accentText else colors.textSecondary,
+                                modifier = Modifier.testTag("dynamic_island_status_text")
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = stringResource(R.string.settings_dynamic_island_desc),
+                            style = AppTypography.listSubtitle,
+                            color = colors.textSecondary
+                        )
+                    }
+                    AppSwitch(
+                        checked = islandEnabled,
+                        onCheckedChange = onDynamicIslandToggle,
+                        modifier = Modifier.testTag("dynamic_island_switch")
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = stringResource(R.string.settings_dynamic_island_xiaomi_hint),
+                    style = AppTypography.caption,
+                    color = colors.textSecondary
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                AppSecondaryButton(
+                    text = stringResource(R.string.settings_open_app_settings),
+                    onClick = {
+                        try {
+                            val intent = Intent(
+                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.parse("package:${context.packageName}")
+                            )
+                            context.startActivity(intent)
+                        } catch (_: Exception) {
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, colors.hairline, RoundedCornerShape(AppTokens.RadiusPill)),
+                    testTag = "open_app_settings_button"
+                )
+
+                AnimatedVisibility(visible = islandEnabled) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        HorizontalDivider(color = colors.hairline, thickness = 1.dp)
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Text(
+                            text = stringResource(R.string.settings_island_visibility),
+                            style = AppTypography.label,
+                            color = colors.textSecondary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        val visibilityOptions = listOf(IslandVisibility.BRIEFLY, IslandVisibility.ALWAYS)
+                        val brieflyLabel = stringResource(R.string.settings_island_visibility_briefly)
+                        val alwaysLabel = stringResource(R.string.settings_island_visibility_always)
+                        AppSegmentedControl(
+                            items = visibilityOptions,
+                            selectedItem = islandVisibility,
+                            onItemSelected = { viewModel.setIslandVisibility(it) },
+                            labelProvider = { option ->
+                                when (option) {
+                                    IslandVisibility.BRIEFLY -> brieflyLabel
+                                    IslandVisibility.ALWAYS -> alwaysLabel
+                                }
+                            },
+                            itemTestTagProvider = { "island_visibility_${it.name.lowercase()}" },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Text(
+                            text = stringResource(R.string.settings_island_position),
+                            style = AppTypography.label,
+                            color = colors.textSecondary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        val positionOptions = listOf(
+                            IslandPosition.BELOW_STATUS_BAR,
+                            IslandPosition.AROUND_CAMERA
+                        )
+                        val belowStatusLabel = stringResource(R.string.settings_island_position_below_status)
+                        val aroundCameraLabel = stringResource(R.string.settings_island_position_around_camera)
+                        AppSegmentedControl(
+                            items = positionOptions,
+                            selectedItem = islandPosition,
+                            onItemSelected = { viewModel.setIslandPosition(it) },
+                            labelProvider = { option ->
+                                when (option) {
+                                    IslandPosition.BELOW_STATUS_BAR -> belowStatusLabel
+                                    IslandPosition.AROUND_CAMERA -> aroundCameraLabel
+                                }
+                            },
+                            itemTestTagProvider = { "island_position_${it.name.lowercase()}" },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        AppPrimaryButton(
+                            text = stringResource(R.string.settings_island_preview),
+                            onClick = { viewModel.triggerIslandPreview() },
+                            modifier = Modifier.fillMaxWidth(),
+                            testTag = "island_preview_button"
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // 6. About App Card
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -522,6 +784,23 @@ fun SettingsScreen(
         }
 
         Spacer(modifier = Modifier.height(24.dp + bottomPadding))
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = bottomPadding + 12.dp, start = 20.dp, end = 20.dp),
+            snackbar = { data ->
+                Snackbar(
+                    snackbarData = data,
+                    shape = RoundedCornerShape(AppTokens.Radius12),
+                    containerColor = colors.accent,
+                    contentColor = colors.onAccent,
+                    actionColor = colors.onAccent
+                )
+            }
+        )
     }
 
     if (showSubtitleStyleDialog) {
@@ -529,6 +808,60 @@ fun SettingsScreen(
             settings = subtitleSettings,
             onSave = { viewModel.updateSubtitleSettings(it) },
             onDismiss = { showSubtitleStyleDialog = false }
+        )
+    }
+
+    if (showOverlayPermissionDialog) {
+        AlertDialog(
+            onDismissRequest = { showOverlayPermissionDialog = false },
+            shape = RoundedCornerShape(AppTokens.Radius24),
+            containerColor = colors.surface,
+            title = {
+                Text(
+                    text = stringResource(R.string.island_permission_title),
+                    style = AppTypography.screenTitle.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+                    color = colors.textPrimary
+                )
+            },
+            text = {
+                Text(
+                    text = stringResource(R.string.island_permission_message),
+                    style = AppTypography.body,
+                    color = colors.textSecondary
+                )
+            },
+            confirmButton = {
+                AppPrimaryButton(
+                    text = stringResource(R.string.island_permission_open_settings),
+                    onClick = {
+                        showOverlayPermissionDialog = false
+                        awaitingOverlayPermission = true
+                        try {
+                            val intent = Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:${context.packageName}")
+                            )
+                            context.startActivity(intent)
+                        } catch (_: Exception) {
+                            awaitingOverlayPermission = false
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar(
+                                    message = permissionNotGrantedMessage,
+                                    duration = SnackbarDuration.Short
+                                )
+                            }
+                        }
+                    },
+                    testTag = "island_permission_open_settings_button"
+                )
+            },
+            dismissButton = {
+                AppSecondaryButton(
+                    text = stringResource(R.string.playlist_cancel),
+                    onClick = { showOverlayPermissionDialog = false },
+                    testTag = "island_permission_cancel_button"
+                )
+            }
         )
     }
 }

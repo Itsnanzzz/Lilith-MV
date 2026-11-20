@@ -9,6 +9,9 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.data.model.SubtitleSettings
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.map
 
 val Context.dataStore by preferencesDataStore(name = "lilith_settings")
@@ -25,6 +28,40 @@ enum class VideoViewMode {
     LIST, GRID
 }
 
+enum class IslandVisibility {
+    BRIEFLY, ALWAYS
+}
+
+enum class IslandPosition {
+    BELOW_STATUS_BAR, AROUND_CAMERA
+}
+
+object DynamicIslandBridge {
+    private val _previewRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val previewRequests: SharedFlow<Unit> = _previewRequests.asSharedFlow()
+
+    @Volatile
+    private var pendingPreviewUntilMs: Long = 0L
+
+    private val _errorMessages = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val errorMessages: SharedFlow<String> = _errorMessages.asSharedFlow()
+
+    fun triggerPreview() {
+        pendingPreviewUntilMs = System.currentTimeMillis() + 2500L
+        _previewRequests.tryEmit(Unit)
+    }
+
+    fun consumePendingPreview(): Boolean {
+        val now = System.currentTimeMillis()
+        val active = pendingPreviewUntilMs > now
+        pendingPreviewUntilMs = 0L
+        return active
+    }
+
+    fun emitError(message: String) {
+        _errorMessages.tryEmit(message)
+    }
+}
 
 class SettingsDataStore(private val context: Context) {
 
@@ -38,6 +75,9 @@ class SettingsDataStore(private val context: Context) {
         val SUBTITLE_TEXT_COLOR = longPreferencesKey("subtitle_text_color")
         val SUBTITLE_BG_COLOR = longPreferencesKey("subtitle_bg_color")
         val VIDEO_VIEW_MODE = stringPreferencesKey("video_view_mode")
+        val ISLAND_ENABLED = booleanPreferencesKey("island_enabled")
+        val ISLAND_VISIBILITY = stringPreferencesKey("island_visibility")
+        val ISLAND_POSITION = stringPreferencesKey("island_position")
     }
 
     val themeModeFlow: Flow<ThemeMode> = context.dataStore.data.map { preferences ->
@@ -88,6 +128,28 @@ class SettingsDataStore(private val context: Context) {
         }
     }
 
+    val islandEnabledFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.ISLAND_ENABLED] ?: false
+    }
+
+    val islandVisibilityFlow: Flow<IslandVisibility> = context.dataStore.data.map { preferences ->
+        val name = preferences[PreferencesKeys.ISLAND_VISIBILITY] ?: IslandVisibility.BRIEFLY.name
+        try {
+            IslandVisibility.valueOf(name)
+        } catch (_: Exception) {
+            IslandVisibility.BRIEFLY
+        }
+    }
+
+    val islandPositionFlow: Flow<IslandPosition> = context.dataStore.data.map { preferences ->
+        val name = preferences[PreferencesKeys.ISLAND_POSITION] ?: IslandPosition.BELOW_STATUS_BAR.name
+        try {
+            IslandPosition.valueOf(name)
+        } catch (_: Exception) {
+            IslandPosition.BELOW_STATUS_BAR
+        }
+    }
+
     suspend fun setThemeMode(mode: ThemeMode) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.THEME_MODE] = mode.name
@@ -129,6 +191,24 @@ class SettingsDataStore(private val context: Context) {
     suspend fun setVideoViewMode(mode: VideoViewMode) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.VIDEO_VIEW_MODE] = mode.name
+        }
+    }
+
+    suspend fun setIslandEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.ISLAND_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setIslandVisibility(visibility: IslandVisibility) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.ISLAND_VISIBILITY] = visibility.name
+        }
+    }
+
+    suspend fun setIslandPosition(position: IslandPosition) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.ISLAND_POSITION] = position.name
         }
     }
 }
