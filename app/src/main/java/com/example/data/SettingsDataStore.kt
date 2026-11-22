@@ -3,6 +3,7 @@ package com.example.data
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -12,7 +13,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import java.io.IOException
 
 val Context.dataStore by preferencesDataStore(name = "lilith_settings")
 
@@ -63,6 +66,15 @@ object DynamicIslandBridge {
     }
 }
 
+data class CachedReleaseData(
+    val version: String,
+    val notes: String,
+    val releaseUrl: String,
+    val apkUrl: String?,
+    val apkSize: Long?,
+    val publishedAt: String
+)
+
 class SettingsDataStore(private val context: Context) {
 
     private object PreferencesKeys {
@@ -78,6 +90,16 @@ class SettingsDataStore(private val context: Context) {
         val ISLAND_ENABLED = booleanPreferencesKey("island_enabled")
         val ISLAND_VISIBILITY = stringPreferencesKey("island_visibility")
         val ISLAND_POSITION = stringPreferencesKey("island_position")
+        val UPDATE_AUTO_CHECK = booleanPreferencesKey("update_auto_check")
+        val UPDATE_LAST_CHECK_AT = longPreferencesKey("update_last_check_at")
+        val UPDATE_SKIPPED_VERSION = stringPreferencesKey("update_skipped_version")
+        val UPDATE_ETAG = stringPreferencesKey("update_etag")
+        val UPDATE_CACHED_VERSION = stringPreferencesKey("update_cached_version")
+        val UPDATE_CACHED_NOTES = stringPreferencesKey("update_cached_notes")
+        val UPDATE_CACHED_RELEASE_URL = stringPreferencesKey("update_cached_release_url")
+        val UPDATE_CACHED_APK_URL = stringPreferencesKey("update_cached_apk_url")
+        val UPDATE_CACHED_APK_SIZE = longPreferencesKey("update_cached_apk_size")
+        val UPDATE_CACHED_PUBLISHED_AT = stringPreferencesKey("update_cached_published_at")
     }
 
     val themeModeFlow: Flow<ThemeMode> = context.dataStore.data.map { preferences ->
@@ -150,6 +172,65 @@ class SettingsDataStore(private val context: Context) {
         }
     }
 
+    private val safePreferencesFlow = context.dataStore.data.catch { e ->
+        if (e is IOException) emit(emptyPreferences()) else throw e
+    }
+
+    val updateAutoCheckFlow: Flow<Boolean> = safePreferencesFlow.map { preferences ->
+        try {
+            preferences[PreferencesKeys.UPDATE_AUTO_CHECK] ?: true
+        } catch (_: Exception) {
+            true
+        }
+    }
+
+    val updateLastCheckAtFlow: Flow<Long> = safePreferencesFlow.map { preferences ->
+        try {
+            (preferences[PreferencesKeys.UPDATE_LAST_CHECK_AT] ?: 0L).coerceAtLeast(0L)
+        } catch (_: Exception) {
+            0L
+        }
+    }
+
+    val updateSkippedVersionFlow: Flow<String> = safePreferencesFlow.map { preferences ->
+        try {
+            preferences[PreferencesKeys.UPDATE_SKIPPED_VERSION] ?: ""
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    val updateETagFlow: Flow<String> = safePreferencesFlow.map { preferences ->
+        try {
+            preferences[PreferencesKeys.UPDATE_ETAG] ?: ""
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    val updateCachedReleaseFlow: Flow<CachedReleaseData?> = safePreferencesFlow.map { preferences ->
+        try {
+            val version = preferences[PreferencesKeys.UPDATE_CACHED_VERSION]?.trim().orEmpty()
+            if (version.isEmpty()) {
+                null
+            } else {
+                CachedReleaseData(
+                    version = version,
+                    notes = (preferences[PreferencesKeys.UPDATE_CACHED_NOTES] ?: "")
+                        .take(UpdateConstants.MAX_NOTES_LENGTH),
+                    releaseUrl = preferences[PreferencesKeys.UPDATE_CACHED_RELEASE_URL] ?: "",
+                    apkUrl = preferences[PreferencesKeys.UPDATE_CACHED_APK_URL]
+                        ?.takeIf { it.isNotBlank() },
+                    apkSize = preferences[PreferencesKeys.UPDATE_CACHED_APK_SIZE]
+                        ?.takeIf { it > 0L },
+                    publishedAt = preferences[PreferencesKeys.UPDATE_CACHED_PUBLISHED_AT] ?: ""
+                )
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     suspend fun setThemeMode(mode: ThemeMode) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.THEME_MODE] = mode.name
@@ -209,6 +290,56 @@ class SettingsDataStore(private val context: Context) {
     suspend fun setIslandPosition(position: IslandPosition) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.ISLAND_POSITION] = position.name
+        }
+    }
+
+    suspend fun setUpdateAutoCheck(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.UPDATE_AUTO_CHECK] = enabled
+        }
+    }
+
+    suspend fun setUpdateLastCheckAt(timestampMs: Long) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.UPDATE_LAST_CHECK_AT] = timestampMs.coerceAtLeast(0L)
+        }
+    }
+
+    suspend fun setUpdateSkippedVersion(version: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.UPDATE_SKIPPED_VERSION] = version
+        }
+    }
+
+    suspend fun clearUpdateETag() {
+        context.dataStore.edit { preferences ->
+            preferences.remove(PreferencesKeys.UPDATE_ETAG)
+        }
+    }
+
+    suspend fun saveUpdateCache(
+        etag: String,
+        release: CachedReleaseData,
+        checkedAtMs: Long
+    ) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.UPDATE_ETAG] = etag
+            preferences[PreferencesKeys.UPDATE_CACHED_VERSION] = release.version
+            preferences[PreferencesKeys.UPDATE_CACHED_NOTES] =
+                release.notes.take(UpdateConstants.MAX_NOTES_LENGTH)
+            preferences[PreferencesKeys.UPDATE_CACHED_RELEASE_URL] = release.releaseUrl
+            if (!release.apkUrl.isNullOrBlank()) {
+                preferences[PreferencesKeys.UPDATE_CACHED_APK_URL] = release.apkUrl
+            } else {
+                preferences.remove(PreferencesKeys.UPDATE_CACHED_APK_URL)
+            }
+            if (release.apkSize != null && release.apkSize > 0L) {
+                preferences[PreferencesKeys.UPDATE_CACHED_APK_SIZE] = release.apkSize
+            } else {
+                preferences.remove(PreferencesKeys.UPDATE_CACHED_APK_SIZE)
+            }
+            preferences[PreferencesKeys.UPDATE_CACHED_PUBLISHED_AT] = release.publishedAt
+            preferences[PreferencesKeys.UPDATE_LAST_CHECK_AT] = checkedAtMs.coerceAtLeast(0L)
         }
     }
 }

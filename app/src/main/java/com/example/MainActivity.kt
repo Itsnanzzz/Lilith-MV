@@ -73,9 +73,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -87,10 +90,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.example.data.ForegroundMediaObserver
 import com.example.data.MediaRepository
 import com.example.data.ThemeMode
 import com.example.data.AppAccent
+import com.example.data.UpdateCheckResult
 import com.example.ui.common.PermissionView
 import com.example.ui.music.AudioEqualizerSheet
 import com.example.ui.music.EqualizerDialog
@@ -106,6 +113,8 @@ import com.example.ui.music.QueueSheet
 import com.example.ui.music.SleepTimerDialog
 import com.example.ui.settings.SettingsScreen
 import com.example.ui.settings.SettingsViewModel
+import com.example.ui.settings.UpdateAvailableDialog
+import com.example.ui.settings.openValidatedUpdateUrl
 import com.example.ui.theme.AppThemeTokens
 import com.example.ui.theme.AppTokens
 import com.example.ui.theme.LilithTheme
@@ -219,6 +228,7 @@ class MainActivity : AppCompatActivity() {
         val uri = intent.data ?: return
 
         isIntentHandled = true
+        (application as? LilithApplication)?.updateRepository?.markLaunchedWithViewIntent()
 
         val cleanIntent = Intent(intent).apply {
             action = Intent.ACTION_MAIN
@@ -481,6 +491,54 @@ fun MainAppContainer(
         }
     }
 
+    val lilithApp = remember(context) {
+        context.applicationContext as? LilithApplication
+    }
+    val updateRepository = lilithApp?.updateRepository
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = rememberCoroutineScope()
+    val settingsHasOpenDialog by settingsViewModel.hasOpenDialog.collectAsState()
+    val isVideoPlayerOpen = videoLibUiState.activePlayingVideo != null
+    val isAutoPopupBlocked =
+        isVideoPlayerOpen ||
+        musicUiState.isQueueSheetVisible ||
+        musicUiState.isEqualizerDialogVisible ||
+        musicUiState.isSpeedDialogVisible ||
+        musicUiState.isSleepTimerDialogVisible ||
+        musicUiState.isCreatePlaylistDialogVisible ||
+        musicUiState.trackToDelete != null ||
+        musicUiState.trackForInfo != null ||
+        musicUiState.trackToRename != null ||
+        videoLibUiState.videoForInfo != null ||
+        videoLibUiState.videoToRename != null ||
+        videoLibUiState.videoToDelete != null ||
+        settingsHasOpenDialog
+    val currentIsVideoOpen by rememberUpdatedState(isVideoPlayerOpen)
+    val currentIsPopupBlocked by rememberUpdatedState(isAutoPopupBlocked)
+    val activeDialogUpdate by if (updateRepository != null) {
+        updateRepository.activeDialogUpdate.collectAsState()
+    } else {
+        remember { mutableStateOf<UpdateCheckResult.UpdateAvailable?>(null) }
+    }
+
+    LaunchedEffect(lifecycleOwner, updateRepository) {
+        if (updateRepository == null) return@LaunchedEffect
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            withFrameNanos { }
+            updateRepository.onMainUiFirstResumedFrame(
+                isVideoPlayerOpen = { currentIsVideoOpen },
+                isPopupBlocked = { currentIsPopupBlocked }
+            )
+        }
+    }
+
+    LaunchedEffect(updateRepository, isAutoPopupBlocked, isVideoPlayerOpen) {
+        updateRepository?.onAutoPopupBlockerChanged(
+            isPopupBlocked = isAutoPopupBlocked,
+            isVideoPlayerOpen = { currentIsVideoOpen }
+        )
+    }
+
     val density = LocalDensity.current
     val isAnimationDisabled = rememberIsAnimationDisabled()
     val saveableStateHolder = rememberSaveableStateHolder()
@@ -728,6 +786,56 @@ fun MainAppContainer(
                 remainingSeconds = sleepTimerSec,
                 onSetTimerMinutes = { musicViewModel.playerManager.setSleepTimer(it) },
                 onDismiss = { musicViewModel.setSleepTimerDialogVisible(false) }
+            )
+        }
+
+        // Shared Root Update Available Dialog (for both automatic popups and manual checks)
+        val dialogUpdate = activeDialogUpdate
+        if (dialogUpdate != null && updateRepository != null && !isVideoPlayerOpen) {
+            val cantOpenLinkMessage = stringResource(R.string.update_cant_open_link)
+            UpdateAvailableDialog(
+                update = dialogUpdate,
+                installedVersion = updateRepository.getInstalledDisplayVersion(),
+                onDownload = {
+                    val targetUrl = dialogUpdate.apkUrl ?: dialogUpdate.releaseUrl
+                    openValidatedUpdateUrl(
+                        context = context,
+                        rawUrl = targetUrl,
+                        isAssetUrl = dialogUpdate.apkUrl != null,
+                        onFailed = {
+                            coroutineScope.launch {
+                                lyricsSnackbarHostState.showSnackbar(
+                                    message = cantOpenLinkMessage,
+                                    duration = SnackbarDuration.Short
+                                )
+                            }
+                        }
+                    )
+                },
+                onOpenReleasePage = {
+                    openValidatedUpdateUrl(
+                        context = context,
+                        rawUrl = dialogUpdate.releaseUrl,
+                        isAssetUrl = false,
+                        onFailed = {
+                            coroutineScope.launch {
+                                lyricsSnackbarHostState.showSnackbar(
+                                    message = cantOpenLinkMessage,
+                                    duration = SnackbarDuration.Short
+                                )
+                            }
+                        }
+                    )
+                },
+                onSkipVersion = {
+                    updateRepository.dismissUpdateDialog()
+                    lilithApp?.applicationScope?.launch {
+                        updateRepository.skipVersion(dialogUpdate.version)
+                    }
+                },
+                onDismiss = {
+                    updateRepository.dismissUpdateDialog()
+                }
             )
         }
 

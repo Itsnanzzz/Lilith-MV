@@ -16,8 +16,6 @@
     <!-- Search & Filter -->
     <string name="search_placeholder">Search…</string>
     <string name="no_media_found">No media found</string>
-    <string name="scan_library">Rescan Library</string>
-    <string name="open_saf_file">Open File…</string>
     <string name="open_saf_folder">Open Folder…</string>
     <string name="filter_all_count">All (%1$d)</string>
 
@@ -334,4 +332,30 @@
     <string name="lyrics_import_invalid">Can\'t use this file</string>
     <string name="lyrics_removed">Imported lyrics removed</string>
     <string name="lyrics_more_options">Lyrics options</string>
+
+    <!-- App Updates -->
+    <string name="settings_version_format">Lilith MV %1$s</string>
+    <string name="update_check_button">Check for updates</string>
+    <string name="update_checking">Checking…</string>
+    <string name="update_checking_desc">Checking for updates</string>
+    <string name="update_last_checked">Last checked: %1$s</string>
+    <string name="update_status_up_to_date">You\'re up to date</string>
+    <string name="update_status_available">Update available: %1$s</string>
+    <string name="update_status_no_releases">No releases published yet</string>
+    <string name="update_status_rate_limited">Rate limit reached, try again later</string>
+    <string name="update_status_error">Couldn\'t check for updates</string>
+    <string name="update_auto_check_title">Check automatically</string>
+    <string name="update_auto_check_desc">Checks GitHub once a day while you use the app. No personal data is sent.</string>
+    <string name="update_badge_desc">New update available</string>
+    <string name="update_dialog_title">Update available</string>
+    <string name="update_dialog_subtitle">Version %1$s (you have %2$s)</string>
+    <string name="update_dialog_published">Published %1$s</string>
+    <string name="update_dialog_size">Download size: %1$s</string>
+    <string name="update_dialog_no_notes">No release notes provided.</string>
+    <string name="update_dialog_download">Download</string>
+    <string name="update_dialog_release_page">Release page</string>
+    <string name="update_dialog_browser_hint">Your browser will download the file. Open it to install the update.</string>
+    <string name="update_dialog_skip">Skip this version</string>
+    <string name="update_dialog_later">Later</string>
+    <string name="update_cant_open_link">Couldn\'t open the link</string>
 </resources>

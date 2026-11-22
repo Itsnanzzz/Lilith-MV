@@ -46,11 +46,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.CircularProgressIndicator
@@ -59,6 +57,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -95,12 +94,16 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.decode.VideoFrameDecoder
 import coil.request.ImageRequest
+import com.example.LilithApplication
 import com.example.R
+import com.example.data.UpdateUiState
 import com.example.data.VideoViewMode
 import com.example.data.model.FolderItem
 import com.example.data.model.VideoItem
 import com.example.ui.common.TimeUtils
 import com.example.ui.navigation.LocalBottomContentPadding
+import com.example.ui.settings.UpdateCheckSearchRowButton
+import com.example.ui.settings.resolveManualUpdateSnackbarMessage
 import com.example.ui.theme.AppChip
 import com.example.ui.theme.AppIconButton
 import com.example.ui.theme.AppSearchField
@@ -115,7 +118,7 @@ import kotlin.math.abs
 
 /**
  * Clean, minimal flat Video Library Screen with Swipeable Folder Pager:
- * - 40dp AppSearchField with two 40dp tonal circular buttons for SAF file picker and refresh
+ * - 40dp AppSearchField with 40dp tonal circular update-check button
  * - 32dp AppChip filter row for video folders with smooth auto-scrolling
  * - HorizontalPager for "All" + each folder page
  * - Flat list of video rows with 16:9 rounded thumbnails (12dp radius), duration badge pill,
@@ -136,11 +139,13 @@ fun VideoLibraryScreen(
     val coroutineScope = rememberCoroutineScope()
     val isAnimationDisabled = rememberIsAnimationDisabled()
     val snackbarHostState = remember { SnackbarHostState() }
-
-    val safVideoLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let { viewModel.openSafVideo(it) }
+    val updateRepository = remember(context) {
+        (context.applicationContext as? LilithApplication)?.updateRepository
+    }
+    val updateUiState by if (updateRepository != null) {
+        updateRepository.uiState.collectAsState()
+    } else {
+        remember { mutableStateOf(UpdateUiState()) }
     }
 
     val intentSenderLauncher = rememberLauncherForActivityResult(
@@ -293,7 +298,7 @@ fun VideoLibraryScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             Spacer(modifier = Modifier.height(6.dp))
 
-            // 1. Search Bar & Action Buttons (Matches Music Tab Top Row)
+            // 1. Search Bar & Action Button (Matches Music Tab Top Row)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -310,26 +315,21 @@ fun VideoLibraryScreen(
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                // Open Video from file system (SAF) - 40dp tonal circle button
-                AppIconButton(
-                    onClick = { safVideoLauncher.launch(arrayOf("video/*")) },
-                    icon = Icons.Default.FileOpen,
-                    contentDescription = stringResource(R.string.open_saf_file),
-                    isTonalCircle = true,
-                    iconSize = 20.dp,
-                    testTag = "open_saf_video_button"
-                )
-
-                Spacer(modifier = Modifier.width(6.dp))
-
-                // Refresh library - 40dp tonal circle button
-                AppIconButton(
-                    onClick = { viewModel.scanVideos() },
-                    icon = Icons.Default.Refresh,
-                    contentDescription = stringResource(R.string.scan_library),
-                    isTonalCircle = true,
-                    iconSize = 20.dp,
-                    testTag = "refresh_videos_button"
+                UpdateCheckSearchRowButton(
+                    uiState = updateUiState,
+                    onClick = {
+                        val repo = updateRepository ?: return@UpdateCheckSearchRowButton
+                        coroutineScope.launch {
+                            val result = repo.checkManually()
+                            resolveManualUpdateSnackbarMessage(context, result)?.let { message ->
+                                snackbarHostState.showSnackbar(
+                                    message = message,
+                                    duration = SnackbarDuration.Short
+                                )
+                            }
+                        }
+                    },
+                    testTag = "video_update_check_button"
                 )
             }
 

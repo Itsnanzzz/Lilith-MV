@@ -67,7 +67,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Edit
@@ -77,7 +76,6 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.QueueMusic
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -117,7 +115,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.LilithApplication
 import com.example.R
+import com.example.data.UpdateUiState
 import com.example.data.db.PlaylistEntity
 import com.example.data.model.AlbumItem
 import com.example.data.model.AudioTrack
@@ -126,6 +126,8 @@ import com.example.playback.AudioFormatDetector
 import com.example.ui.common.MediaRenameDialog
 import com.example.ui.common.MusicThumbnail
 import com.example.ui.common.TimeUtils
+import com.example.ui.settings.UpdateCheckSearchRowButton
+import com.example.ui.settings.resolveManualUpdateSnackbarMessage
 import com.example.ui.theme.AppBadge
 import com.example.ui.theme.AppChip
 import com.example.ui.theme.AppIconButton
@@ -160,6 +162,14 @@ fun MusicScreen(
     val currentPlayingTrack by viewModel.playerManager.currentTrack.collectAsState()
     val isPlaying by viewModel.playerManager.isPlaying.collectAsState()
     val isAnimationDisabled = rememberIsAnimationDisabled()
+    val updateRepository = remember(context) {
+        (context.applicationContext as? LilithApplication)?.updateRepository
+    }
+    val updateUiState by if (updateRepository != null) {
+        updateRepository.uiState.collectAsState()
+    } else {
+        remember { mutableStateOf(UpdateUiState()) }
+    }
 
     // Hoisted scroll positions so each page keeps its own position when swiped away and back
     val songsListState = rememberLazyListState()
@@ -207,13 +217,6 @@ fun MusicScreen(
                 pagerState.animateScrollToPage(targetPage)
             }
         }
-    }
-
-    // SAF file picker for audio tracks
-    val safAudioLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let { viewModel.openSafTrack(it) }
     }
 
     val intentSenderLauncher = rememberLauncherForActivityResult(
@@ -295,7 +298,7 @@ fun MusicScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             Spacer(modifier = Modifier.height(10.dp))
 
-            // 1. Top Search & Action Row: Search Field (40dp) + 2 Tonal Circle Icon Buttons (40dp)
+            // 1. Top Search & Action Row: Search Field (40dp) + 1 Update Check Tonal Circle Button (40dp)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -313,28 +316,21 @@ fun MusicScreen(
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                // Open SAF Audio: 40dp tonal circle in surfaceMuted with 20dp icon
-                AppIconButton(
-                    onClick = { safAudioLauncher.launch(arrayOf("audio/*")) },
-                    icon = Icons.Default.FileOpen,
-                    contentDescription = stringResource(R.string.open_saf_file),
-                    isTonalCircle = true,
-                    iconSize = 20.dp,
-                    tintOverride = colors.textPrimary,
-                    testTag = "open_saf_audio_button"
-                )
-
-                Spacer(modifier = Modifier.width(4.dp))
-
-                // Rescan Library: 40dp tonal circle in surfaceMuted with 20dp icon
-                AppIconButton(
-                    onClick = { viewModel.scanMediaLibrary() },
-                    icon = Icons.Default.Refresh,
-                    contentDescription = stringResource(R.string.scan_library),
-                    isTonalCircle = true,
-                    iconSize = 20.dp,
-                    tintOverride = colors.textPrimary,
-                    testTag = "rescan_library_button"
+                UpdateCheckSearchRowButton(
+                    uiState = updateUiState,
+                    onClick = {
+                        val repo = updateRepository ?: return@UpdateCheckSearchRowButton
+                        coroutineScope.launch {
+                            val result = repo.checkManually()
+                            resolveManualUpdateSnackbarMessage(context, result)?.let { message ->
+                                snackbarHostState.showSnackbar(
+                                    message = message,
+                                    duration = SnackbarDuration.Short
+                                )
+                            }
+                        }
+                    },
+                    testTag = "music_update_check_button"
                 )
             }
 

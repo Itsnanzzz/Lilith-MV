@@ -14,6 +14,11 @@ import coil.memory.MemoryCache
 import com.example.data.LilithDatabase
 import com.example.data.LyricsRepository
 import com.example.data.MediaThumbnailFetcher
+import com.example.data.SettingsDataStore
+import com.example.data.UpdateRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,7 +28,12 @@ class LilithApplication : Application(), ImageLoaderFactory {
     lateinit var database: LilithDatabase
         private set
 
+    val applicationScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    val settingsDataStore: SettingsDataStore by lazy { SettingsDataStore(this) }
     val lyricsRepository: LyricsRepository by lazy { LyricsRepository(this) }
+    val updateRepository: UpdateRepository by lazy {
+        UpdateRepository(this, settingsDataStore, applicationScope)
+    }
 
     private var startedActivityCount = 0
     private val _isAppInForeground = MutableStateFlow(false)

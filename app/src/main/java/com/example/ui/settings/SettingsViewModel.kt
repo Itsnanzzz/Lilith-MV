@@ -4,22 +4,36 @@ import android.app.Application
 import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.LilithApplication
 import com.example.data.AppAccent
 import com.example.data.DynamicIslandBridge
 import com.example.data.IslandPosition
 import com.example.data.IslandVisibility
 import com.example.data.SettingsDataStore
 import com.example.data.ThemeMode
+import com.example.data.UpdateRepository
+import com.example.data.UpdateUiState
 import com.example.data.model.SubtitleSettings
 import com.example.playback.MusicPlaybackService
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val settingsDataStore = SettingsDataStore(application)
+    private val lilithApp = application as? LilithApplication
+    private val settingsDataStore = lilithApp?.settingsDataStore ?: SettingsDataStore(application)
+    private val updateRepository = lilithApp?.updateRepository
+        ?: UpdateRepository(application, settingsDataStore, viewModelScope)
+
+    val installedDisplayVersion: String = updateRepository.getInstalledDisplayVersion()
 
     val themeMode: StateFlow<ThemeMode> = settingsDataStore.themeModeFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, ThemeMode.SYSTEM)
@@ -47,6 +61,16 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     val islandPosition: StateFlow<IslandPosition> = settingsDataStore.islandPositionFlow
         .stateIn(viewModelScope, SharingStarted.Lazily, IslandPosition.BELOW_STATUS_BAR)
+
+    val updateUiState: StateFlow<UpdateUiState> = updateRepository.uiState
+
+    private val _manualUpdateMessages = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val manualUpdateMessages: SharedFlow<String> = _manualUpdateMessages.asSharedFlow()
+
+    private val _hasOpenDialog = MutableStateFlow(false)
+    val hasOpenDialog: StateFlow<Boolean> = _hasOpenDialog.asStateFlow()
+
+    private var manualCheckJob: Job? = null
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
@@ -108,6 +132,31 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun triggerIslandPreview() {
         ensurePlaybackServiceStarted()
         DynamicIslandBridge.triggerPreview()
+    }
+
+    fun setHasOpenDialog(open: Boolean) {
+        _hasOpenDialog.value = open
+    }
+
+    fun checkForUpdatesManually() {
+        if (manualCheckJob?.isActive == true) return
+        manualCheckJob = viewModelScope.launch {
+            val result = updateRepository.checkManually()
+            resolveManualUpdateSnackbarMessage(getApplication(), result)?.let { message ->
+                _manualUpdateMessages.tryEmit(message)
+            }
+        }
+    }
+
+    fun cancelManualUpdateCheck() {
+        manualCheckJob?.cancel()
+        manualCheckJob = null
+    }
+
+    fun setAutoCheckUpdates(enabled: Boolean) {
+        viewModelScope.launch {
+            updateRepository.setAutoCheckEnabled(enabled)
+        }
     }
 
     private fun ensurePlaybackServiceStarted() {

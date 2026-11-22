@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -32,7 +33,9 @@ import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material.icons.filled.Update
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Snackbar
@@ -73,6 +76,7 @@ import com.example.data.DynamicIslandBridge
 import com.example.data.IslandPosition
 import com.example.data.IslandVisibility
 import com.example.data.ThemeMode
+import com.example.data.UpdateCheckResult
 import com.example.ui.navigation.LocalBottomContentPadding
 import com.example.ui.theme.AppChip
 import com.example.ui.theme.AppPrimaryButton
@@ -116,12 +120,35 @@ fun SettingsScreen(
     val islandEnabled by viewModel.islandEnabled.collectAsState()
     val islandVisibility by viewModel.islandVisibility.collectAsState()
     val islandPosition by viewModel.islandPosition.collectAsState()
+    val updateUiState by viewModel.updateUiState.collectAsState()
 
     var showSubtitleStyleDialog by remember { mutableStateOf(false) }
     var showOverlayPermissionDialog by remember { mutableStateOf(false) }
     var awaitingOverlayPermission by remember { mutableStateOf(false) }
 
     val permissionNotGrantedMessage = stringResource(R.string.island_permission_not_granted)
+
+    DisposableEffect(showSubtitleStyleDialog, showOverlayPermissionDialog) {
+        viewModel.setHasOpenDialog(showSubtitleStyleDialog || showOverlayPermissionDialog)
+        onDispose {
+            viewModel.setHasOpenDialog(false)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.cancelManualUpdateCheck()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.manualUpdateMessages.collect { message ->
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Short
+            )
+        }
+    }
 
     LaunchedEffect(Unit) {
         DynamicIslandBridge.errorMessages.collect { errorMsg ->
@@ -766,7 +793,10 @@ fun SettingsScreen(
                             color = colors.textPrimary
                         )
                         Text(
-                            text = stringResource(R.string.settings_version),
+                            text = stringResource(
+                                R.string.settings_version_format,
+                                viewModel.installedDisplayVersion
+                            ),
                             style = AppTypography.caption,
                             color = colors.textSecondary
                         )
@@ -780,6 +810,157 @@ fun SettingsScreen(
                     style = AppTypography.listSubtitle,
                     color = colors.textSecondary
                 )
+
+                Spacer(modifier = Modifier.height(14.dp))
+                HorizontalDivider(color = colors.hairline, thickness = 1.dp)
+                Spacer(modifier = Modifier.height(10.dp))
+
+                val isCheckingForUpdates = updateUiState.isChecking
+                val formattedLastCheck = remember(updateUiState.lastCheckedAt) {
+                    formatUpdateTimestamp(updateUiState.lastCheckedAt)
+                }
+                val updateStatusText = when {
+                    isCheckingForUpdates -> stringResource(R.string.update_checking)
+                    else -> when (val result = updateUiState.lastResult) {
+                        UpdateCheckResult.UpToDate ->
+                            stringResource(R.string.update_status_up_to_date)
+
+                        is UpdateCheckResult.UpdateAvailable ->
+                            stringResource(R.string.update_status_available, result.version)
+
+                        UpdateCheckResult.NoReleases ->
+                            stringResource(R.string.update_status_no_releases)
+
+                        UpdateCheckResult.RateLimited ->
+                            stringResource(R.string.update_status_rate_limited)
+
+                        UpdateCheckResult.NetworkError,
+                        UpdateCheckResult.ParseError ->
+                            stringResource(R.string.update_status_error)
+
+                        null -> null
+                    }
+                }
+                val showUpdateBadge = updateUiState.hasAvailableBadge
+                val badgeContentDesc = stringResource(R.string.update_badge_desc)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 48.dp)
+                        .clip(RoundedCornerShape(AppTokens.Radius12))
+                        .clickable(
+                            enabled = !isCheckingForUpdates,
+                            role = Role.Button,
+                            onClick = { viewModel.checkForUpdatesManually() }
+                        )
+                        .padding(vertical = 8.dp)
+                        .testTag("check_updates_button"),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = if (isCheckingForUpdates) 12.dp else 0.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Update,
+                            contentDescription = null,
+                            tint = colors.accentText,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = stringResource(R.string.update_check_button),
+                                    style = AppTypography.listTitle.copy(fontSize = 14.sp),
+                                    color = colors.textPrimary
+                                )
+                                if (showUpdateBadge) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(colors.foregroundAccent)
+                                            .semantics { contentDescription = badgeContentDesc }
+                                            .testTag("update_available_badge")
+                                    )
+                                }
+                            }
+                            if (updateStatusText != null) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = updateStatusText,
+                                    style = AppTypography.listSubtitle,
+                                    color = if (showUpdateBadge) colors.accentText else colors.textSecondary,
+                                    modifier = Modifier.testTag("update_status_text")
+                                )
+                            }
+                            if (!isCheckingForUpdates && formattedLastCheck.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = stringResource(
+                                        R.string.update_last_checked,
+                                        formattedLastCheck
+                                    ),
+                                    style = AppTypography.caption,
+                                    color = colors.textSecondary
+                                )
+                            }
+                        }
+                    }
+                    if (isCheckingForUpdates) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = colors.accentText
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                HorizontalDivider(color = colors.hairline, thickness = 1.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 48.dp)
+                        .clip(RoundedCornerShape(AppTokens.Radius12))
+                        .clickable(role = Role.Switch) {
+                            viewModel.setAutoCheckUpdates(!updateUiState.autoCheckEnabled)
+                        }
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 12.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.update_auto_check_title),
+                            style = AppTypography.listTitle.copy(fontSize = 14.sp),
+                            color = colors.textPrimary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = stringResource(R.string.update_auto_check_desc),
+                            style = AppTypography.listSubtitle,
+                            color = colors.textSecondary
+                        )
+                    }
+                    AppSwitch(
+                        checked = updateUiState.autoCheckEnabled,
+                        onCheckedChange = { viewModel.setAutoCheckUpdates(it) },
+                        modifier = Modifier.testTag("auto_check_updates_switch")
+                    )
+                }
             }
         }
 

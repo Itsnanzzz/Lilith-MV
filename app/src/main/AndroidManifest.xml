@@ -20,6 +20,9 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
+    <!-- Update Checks -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:name=".LilithApplication"
         android:allowBackup="true"
