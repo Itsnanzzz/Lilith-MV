@@ -312,4 +312,26 @@
     <string name="island_progress_percent_desc">Progress %1$d%%</string>
     <string name="island_preview_sample_title">Midnight Echoes</string>
     <string name="island_preview_sample_artist">Lilith Studio</string>
+
+    <!-- Now Playing Lyrics -->
+    <string name="lyrics_title">Lyrics</string>
+    <string name="lyrics_show">Show lyrics</string>
+    <string name="lyrics_hide">Hide lyrics</string>
+    <string name="lyrics_badge_synced">Synced</string>
+    <string name="lyrics_badge_plain">Plain</string>
+    <string name="lyrics_import">Import lyrics</string>
+    <string name="lyrics_import_menu">Import lyrics…</string>
+    <string name="lyrics_remove_imported">Remove imported lyrics</string>
+    <string name="lyrics_sync_offset">Sync offset</string>
+    <string name="lyrics_sync_offset_reset">Reset</string>
+    <string name="lyrics_sync_offset_decrease">Decrease sync offset by 0.5 seconds</string>
+    <string name="lyrics_sync_offset_increase">Increase sync offset by 0.5 seconds</string>
+    <string name="lyrics_empty_title">No lyrics found</string>
+    <string name="lyrics_empty_helper">Import a .lrc or .txt file for this song.</string>
+    <string name="lyrics_empty_no_import_helper">No embedded lyrics in this file.</string>
+    <string name="lyrics_error_title">Couldn\'t read lyrics</string>
+    <string name="lyrics_imported">Lyrics imported</string>
+    <string name="lyrics_import_invalid">Can\'t use this file</string>
+    <string name="lyrics_removed">Imported lyrics removed</string>
+    <string name="lyrics_more_options">Lyrics options</string>
 </resources>

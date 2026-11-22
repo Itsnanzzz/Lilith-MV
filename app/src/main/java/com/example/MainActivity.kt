@@ -54,6 +54,10 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
@@ -61,6 +65,7 @@ import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -101,6 +106,8 @@ import com.example.ui.music.QueueSheet
 import com.example.ui.music.SleepTimerDialog
 import com.example.ui.settings.SettingsScreen
 import com.example.ui.settings.SettingsViewModel
+import com.example.ui.theme.AppThemeTokens
+import com.example.ui.theme.AppTokens
 import com.example.ui.theme.LilithTheme
 import com.example.ui.theme.LocalNeumorphicColors
 import com.example.ui.theme.NeumorphicFloatingBottomBar
@@ -431,6 +438,7 @@ fun MainAppContainer(
     }
 
     val musicUiState by musicViewModel.uiState.collectAsState()
+    val lyricsUiState by musicViewModel.lyricsUiState.collectAsState()
     val videoLibUiState by videoLibraryViewModel.uiState.collectAsState()
 
     val currentPlayingTrack by musicViewModel.playerManager.currentTrack.collectAsState()
@@ -445,6 +453,26 @@ fun MainAppContainer(
     val sleepTimerSec by musicViewModel.playerManager.sleepTimerRemainingSeconds.collectAsState()
 
     val equalizerState by musicViewModel.equalizerState.collectAsState()
+
+    val lyricsSnackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(Unit) {
+        musicViewModel.lyricsEvents.collect { message ->
+            lyricsSnackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Short
+            )
+        }
+    }
+
+    val lyricsImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        musicViewModel.handleImportedLyricsUri(
+            uri = uri,
+            isLyricsPanelOpen = musicViewModel.uiState.value.isNowPlayingExpanded,
+            currentTrack = musicViewModel.playerManager.currentTrack.value
+        )
+    }
 
     // If video starts playing, pause music playback to avoid mixed audio
     LaunchedEffect(videoLibUiState.activePlayingVideo) {
@@ -605,6 +633,7 @@ fun MainAppContainer(
                 durationMs = musicDurationMs,
                 repeatMode = repeatMode,
                 shuffleEnabled = shuffleEnabled,
+                isExpanded = musicUiState.isNowPlayingExpanded,
                 isTrackVisible = videoLibUiState.activePlayingVideo == null && musicUiState.isNowPlayingExpanded,
                 playbackSpeed = playbackSpeed,
                 formatInfo = formatInfo,
@@ -619,7 +648,22 @@ fun MainAppContainer(
                 onOpenSpeedDialog = { musicViewModel.setSpeedDialogVisible(true) },
                 onOpenSleepTimerDialog = { musicViewModel.setSleepTimerDialogVisible(true) },
                 onOpenEqualizerDialog = { musicViewModel.setEqualizerDialogVisible(true) },
-                onOpenQueueSheet = { musicViewModel.setQueueSheetVisible(true) }
+                onOpenQueueSheet = { musicViewModel.setQueueSheetVisible(true) },
+                lyricsUiState = lyricsUiState,
+                positionFlow = musicViewModel.playerManager.currentPositionMs,
+                onLyricsVisibilityChanged = { track, visible ->
+                    musicViewModel.onLyricsVisibilityChanged(track, visible)
+                },
+                onImportLyrics = { track ->
+                    if (musicViewModel.prepareLyricsImport(track)) {
+                        lyricsImportLauncher.launch(
+                            arrayOf("text/plain", "application/octet-stream", "*/*")
+                        )
+                    }
+                },
+                onRemoveImportedLyrics = { track ->
+                    musicViewModel.removeImportedLyrics(track)
+                }
             )
         }
 
@@ -686,5 +730,24 @@ fun MainAppContainer(
                 onDismiss = { musicViewModel.setSleepTimerDialogVisible(false) }
             )
         }
+
+        // Lyrics import/remove feedback Snackbar (visible over NowPlayingSheet & main tabs)
+        val colors = AppThemeTokens.colors
+        SnackbarHost(
+            hostState = lyricsSnackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            snackbar = { data ->
+                Snackbar(
+                    snackbarData = data,
+                    shape = RoundedCornerShape(AppTokens.Radius12),
+                    containerColor = colors.accent,
+                    contentColor = colors.onAccent,
+                    actionColor = colors.onAccent
+                )
+            }
+        )
     }
 }

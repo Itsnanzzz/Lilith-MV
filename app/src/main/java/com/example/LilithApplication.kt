@@ -12,6 +12,7 @@ import coil.decode.VideoFrameDecoder
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.example.data.LilithDatabase
+import com.example.data.LyricsRepository
 import com.example.data.MediaThumbnailFetcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +22,8 @@ class LilithApplication : Application(), ImageLoaderFactory {
 
     lateinit var database: LilithDatabase
         private set
+
+    val lyricsRepository: LyricsRepository by lazy { LyricsRepository(this) }
 
     private var startedActivityCount = 0
     private val _isAppInForeground = MutableStateFlow(false)

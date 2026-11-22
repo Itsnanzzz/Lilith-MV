@@ -7,10 +7,14 @@ import android.content.IntentSender
 import android.net.Uri
 import android.os.Build
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.example.LilithApplication
 import com.example.R
 import com.example.data.DeleteTrackResult
+import com.example.data.Lyrics
+import com.example.data.LyricsImportResult
+import com.example.data.LyricsLoadResult
 import com.example.data.MediaRepository
 import com.example.data.MediaStoreSignature
 import com.example.data.RenameMediaResult
@@ -81,14 +85,41 @@ data class MusicUiState(
     val operatingTrackId: Long? = null
 )
 
-class MusicViewModel(application: Application) : AndroidViewModel(application) {
+sealed interface LyricsUiState {
+    data object Idle : LyricsUiState
+    data class Loading(val trackId: Long, val canImport: Boolean) : LyricsUiState
+    data class Loaded(
+        val trackId: Long,
+        val lyrics: Lyrics,
+        val canImport: Boolean,
+        val hasImportedLyrics: Boolean
+    ) : LyricsUiState
+    data class Empty(val trackId: Long, val canImport: Boolean) : LyricsUiState
+    data class Error(val trackId: Long, val canImport: Boolean) : LyricsUiState
+}
+
+class MusicViewModel(
+    application: Application,
+    private val savedStateHandle: SavedStateHandle = SavedStateHandle()
+) : AndroidViewModel(application) {
+
+    companion object {
+        private const val KEY_PENDING_LYRICS_IMPORT_ID = "pending_lyrics_import_media_store_id"
+    }
 
     private val repository = MediaRepository(application)
     private val database = (application as LilithApplication).database
+    private val lyricsRepository = (application as LilithApplication).lyricsRepository
     val playerManager = MusicPlayerManager(application)
 
     private val _uiState = MutableStateFlow(MusicUiState())
     val uiState: StateFlow<MusicUiState> = _uiState.asStateFlow()
+
+    private val _lyricsUiState = MutableStateFlow<LyricsUiState>(LyricsUiState.Idle)
+    val lyricsUiState: StateFlow<LyricsUiState> = _lyricsUiState.asStateFlow()
+
+    private val _lyricsEvents = MutableSharedFlow<String>()
+    val lyricsEvents: SharedFlow<String> = _lyricsEvents.asSharedFlow()
 
     private val _deleteEvents = MutableSharedFlow<MusicDeleteEvent>()
     val deleteEvents: SharedFlow<MusicDeleteEvent> = _deleteEvents.asSharedFlow()
@@ -98,6 +129,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     private var pendingRename: Pair<AudioTrack, String>? = null
     private var playlistSongsJob: Job? = null
+    private var lyricsLoadJob: Job? = null
+    private var loadedLyricsTrackUri: String? = null
     private val scanMutex = Mutex()
     @Volatile
     private var hasCompletedInitialScan = false
@@ -358,6 +391,107 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setNowPlayingExpanded(expanded: Boolean) {
         _uiState.value = _uiState.value.copy(isNowPlayingExpanded = expanded)
+        if (!expanded) {
+            onLyricsVisibilityChanged(track = null, visible = false)
+        }
+    }
+
+    fun onLyricsVisibilityChanged(track: AudioTrack?, visible: Boolean) {
+        if (!visible || track == null) {
+            lyricsLoadJob?.cancel()
+            lyricsLoadJob = null
+            loadedLyricsTrackUri = null
+            _lyricsUiState.value = LyricsUiState.Idle
+            return
+        }
+        loadLyricsForTrack(track, forceReload = false)
+    }
+
+    private fun loadLyricsForTrack(track: AudioTrack, forceReload: Boolean) {
+        val currentState = _lyricsUiState.value
+        val alreadyForSameTrack = loadedLyricsTrackUri == track.uri && when (currentState) {
+            is LyricsUiState.Loading -> currentState.trackId == track.id
+            is LyricsUiState.Loaded -> currentState.trackId == track.id
+            is LyricsUiState.Empty -> currentState.trackId == track.id
+            is LyricsUiState.Error -> currentState.trackId == track.id
+            LyricsUiState.Idle -> false
+        }
+        if (!forceReload && alreadyForSameTrack) {
+            return
+        }
+
+        lyricsLoadJob?.cancel()
+        loadedLyricsTrackUri = track.uri
+        val canImport = lyricsRepository.resolveMediaStoreId(track) != null
+        _lyricsUiState.value = LyricsUiState.Loading(trackId = track.id, canImport = canImport)
+
+        lyricsLoadJob = viewModelScope.launch {
+            val result = lyricsRepository.loadLyrics(track)
+            _lyricsUiState.value = when (result) {
+                is LyricsLoadResult.Found -> LyricsUiState.Loaded(
+                    trackId = track.id,
+                    lyrics = result.lyrics,
+                    canImport = result.canImport,
+                    hasImportedLyrics = result.hasImportedLyrics
+                )
+                is LyricsLoadResult.NotFound -> LyricsUiState.Empty(
+                    trackId = track.id,
+                    canImport = result.canImport
+                )
+                is LyricsLoadResult.Error -> LyricsUiState.Error(
+                    trackId = track.id,
+                    canImport = result.canImport
+                )
+            }
+        }
+    }
+
+    fun prepareLyricsImport(track: AudioTrack): Boolean {
+        val mediaStoreId = lyricsRepository.resolveMediaStoreId(track) ?: return false
+        savedStateHandle[KEY_PENDING_LYRICS_IMPORT_ID] = mediaStoreId
+        return true
+    }
+
+    fun handleImportedLyricsUri(
+        uri: Uri?,
+        isLyricsPanelOpen: Boolean,
+        currentTrack: AudioTrack?
+    ) {
+        val pendingId = savedStateHandle.get<Long>(KEY_PENDING_LYRICS_IMPORT_ID)
+        savedStateHandle.remove<Long>(KEY_PENDING_LYRICS_IMPORT_ID)
+        if (uri == null || pendingId == null || pendingId <= 0L) return
+
+        viewModelScope.launch {
+            when (val result = lyricsRepository.importLyrics(pendingId, uri)) {
+                is LyricsImportResult.Success -> {
+                    _lyricsEvents.emit(getApplication<Application>().getString(R.string.lyrics_imported))
+                    val matchesCurrent = isLyricsPanelOpen &&
+                        currentTrack != null &&
+                        lyricsRepository.resolveMediaStoreId(currentTrack) == pendingId
+                    if (matchesCurrent && currentTrack != null) {
+                        loadedLyricsTrackUri = currentTrack.uri
+                        _lyricsUiState.value = LyricsUiState.Loaded(
+                            trackId = currentTrack.id,
+                            lyrics = result.lyrics,
+                            canImport = true,
+                            hasImportedLyrics = true
+                        )
+                    }
+                }
+                is LyricsImportResult.InvalidFile -> {
+                    _lyricsEvents.emit(getApplication<Application>().getString(R.string.lyrics_import_invalid))
+                }
+            }
+        }
+    }
+
+    fun removeImportedLyrics(track: AudioTrack) {
+        val mediaStoreId = lyricsRepository.resolveMediaStoreId(track) ?: return
+        viewModelScope.launch {
+            lyricsRepository.deleteImportedLyrics(mediaStoreId)
+            _lyricsEvents.emit(getApplication<Application>().getString(R.string.lyrics_removed))
+            loadLyricsForTrack(track, forceReload = true)
+        }
     }
 
     fun setQueueSheetVisible(visible: Boolean) {
@@ -674,7 +808,10 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             // 1. Remove from all playlists in Room
             database.playlistDao().removeSongFromAllPlaylists(track.uri)
 
-            // 2. Remove from playback / queue
+            // 2. Remove any imported lyrics file stored for this track
+            lyricsRepository.deleteImportedLyricsForTrack(track)
+
+            // 3. Remove from playback / queue
             playerManager.removeTrackFromPlayback(track.uri)
 
             // 3. Update memory lists immediately
@@ -715,6 +852,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
+        lyricsLoadJob?.cancel()
         playerManager.release()
         super.onCleared()
     }

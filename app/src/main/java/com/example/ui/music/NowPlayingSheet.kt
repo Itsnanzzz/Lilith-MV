@@ -2,7 +2,9 @@ package com.example.ui.music
 
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.MarqueeAnimationMode
 import androidx.compose.foundation.MarqueeSpacing
@@ -51,8 +53,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,17 +68,23 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.Player
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import com.example.R
 import com.example.data.model.AudioFormatInfo
 import com.example.data.model.AudioTrack
@@ -118,23 +128,51 @@ fun NowPlayingSheet(
     onToggleShuffle: () -> Unit,
     onOpenQueueSheet: () -> Unit,
     modifier: Modifier = Modifier,
+    isExpanded: Boolean = true,
     isTrackVisible: Boolean = true,
     playbackSpeed: Float = 1.0f,
     sleepTimerRemainingSec: Int = 0,
     onOpenSpeedDialog: () -> Unit = {},
     onOpenSleepTimerDialog: () -> Unit = {},
-    onOpenEqualizerDialog: () -> Unit = {}
+    onOpenEqualizerDialog: () -> Unit = {},
+    lyricsUiState: LyricsUiState = LyricsUiState.Idle,
+    positionFlow: StateFlow<Long>? = null,
+    onLyricsVisibilityChanged: (AudioTrack?, Boolean) -> Unit = { _, _ -> },
+    onImportLyrics: (AudioTrack) -> Unit = {},
+    onRemoveImportedLyrics: (AudioTrack) -> Unit = {}
 ) {
     if (track == null) return
 
     val colors = AppThemeTokens.colors
+    val isAnimationDisabled = rememberIsAnimationDisabled()
     BackHandler(onBack = onCollapse)
 
     var isDraggingSlider by remember { mutableStateOf(false) }
     var dragPositionMs by remember { mutableFloatStateOf(currentPositionMs.toFloat()) }
+    var showLyrics by rememberSaveable { mutableStateOf(false) }
+    var syncOffsetMs by rememberSaveable(track.id) { mutableLongStateOf(0L) }
+    var showSyncOffsetDialog by rememberSaveable(track.id) { mutableStateOf(false) }
+
+    val fallbackPositionFlow = remember(currentPositionMs) { MutableStateFlow(currentPositionMs) }
+    val activePositionFlow = positionFlow ?: fallbackPositionFlow
 
     LaunchedEffect(track.id) {
         isDraggingSlider = false
+    }
+
+    LaunchedEffect(isExpanded) {
+        if (!isExpanded) {
+            showLyrics = false
+            showSyncOffsetDialog = false
+        }
+    }
+
+    LaunchedEffect(showLyrics, isExpanded, track.id, track.uri) {
+        if (isExpanded && showLyrics) {
+            onLyricsVisibilityChanged(track, true)
+        } else {
+            onLyricsVisibilityChanged(null, false)
+        }
     }
 
     val displayPositionMs = if (isDraggingSlider) {
@@ -166,40 +204,18 @@ fun NowPlayingSheet(
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 1. Top Bar: Flat Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AppIconButton(
-                    onClick = onCollapse,
-                    icon = Icons.Default.KeyboardArrowDown,
-                    contentDescription = stringResource(R.string.close),
-                    iconSize = 26.dp,
-                    tintOverride = colors.textPrimary,
-                    testTag = "collapse_now_playing_button"
-                )
-
-                Text(
-                    text = stringResource(R.string.now_playing),
-                    style = AppTypography.screenTitle.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-                    color = colors.textPrimary
-                )
-
-                AppIconButton(
-                    onClick = onOpenQueueSheet,
-                    icon = Icons.Default.QueueMusic,
-                    contentDescription = stringResource(R.string.queue_title),
-                    iconSize = 22.dp,
-                    tintOverride = colors.textPrimary,
-                    testTag = "open_queue_button"
-                )
-            }
+            // 1. Top Bar: Flat Header (centered title with safe clamping around asymmetrical actions)
+            NowPlayingTopBar(
+                showLyrics = showLyrics,
+                onCollapse = onCollapse,
+                onToggleLyrics = { showLyrics = !showLyrics },
+                onOpenQueueSheet = onOpenQueueSheet,
+                colors = colors
+            )
 
             Spacer(modifier = Modifier.height(spacingLarge))
 
-            // 2. Large Artwork: Square, 28dp radius, flat subtle surfaceMuted well
+            // 2. Large Artwork / Lyrics Container: Square, 28dp radius, flat subtle surfaceMuted well
             val artShape = RoundedCornerShape(AppTokens.Radius28)
             Box(
                 modifier = Modifier
@@ -209,12 +225,34 @@ fun NowPlayingSheet(
                     .background(colors.surfaceMuted),
                 contentAlignment = Alignment.Center
             ) {
-                val artTarget = track.albumArtUri?.takeIf { it.isNotBlank() } ?: track.uri
-                MusicThumbnail(
-                    artTarget = artTarget,
-                    contentDescription = track.album,
-                    modifier = Modifier.fillMaxSize()
-                )
+                Crossfade(
+                    targetState = showLyrics,
+                    animationSpec = if (isAnimationDisabled) snap() else tween(durationMillis = AppTokens.AnimDurationMedium),
+                    label = "artwork_lyrics_crossfade"
+                ) { isLyricsOpen ->
+                    if (isLyricsOpen) {
+                        LyricsContainer(
+                            lyricsState = lyricsUiState,
+                            trackId = track.id,
+                            isPlaying = isPlaying,
+                            isVisible = isExpanded && showLyrics && isTrackVisible,
+                            positionFlow = activePositionFlow,
+                            syncOffsetMs = syncOffsetMs,
+                            onSeek = onSeek,
+                            onImportLyrics = { onImportLyrics(track) },
+                            onRemoveImportedLyrics = { onRemoveImportedLyrics(track) },
+                            onOpenSyncOffsetDialog = { showSyncOffsetDialog = true },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        val artTarget = track.albumArtUri?.takeIf { it.isNotBlank() } ?: track.uri
+                        MusicThumbnail(
+                            artTarget = artTarget,
+                            contentDescription = track.album,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(spacingLarge))
@@ -389,6 +427,106 @@ fun NowPlayingSheet(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+
+    if (showSyncOffsetDialog) {
+        SyncOffsetDialog(
+            syncOffsetMs = syncOffsetMs,
+            onOffsetChange = { syncOffsetMs = it },
+            onDismiss = { showSyncOffsetDialog = false }
+        )
+    }
+}
+
+@Composable
+private fun NowPlayingTopBar(
+    showLyrics: Boolean,
+    onCollapse: () -> Unit,
+    onToggleLyrics: () -> Unit,
+    onOpenQueueSheet: () -> Unit,
+    colors: AppColors
+) {
+    Layout(
+        modifier = Modifier.fillMaxWidth(),
+        content = {
+            Box(modifier = Modifier.layoutId("left")) {
+                AppIconButton(
+                    onClick = onCollapse,
+                    icon = Icons.Default.KeyboardArrowDown,
+                    contentDescription = stringResource(R.string.close),
+                    iconSize = 26.dp,
+                    tintOverride = colors.textPrimary,
+                    testTag = "collapse_now_playing_button"
+                )
+            }
+
+            Text(
+                text = stringResource(R.string.now_playing),
+                style = AppTypography.screenTitle.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                color = colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .layoutId("title")
+                    .padding(horizontal = 4.dp)
+            )
+
+            Row(
+                modifier = Modifier.layoutId("right"),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AppIconButton(
+                    onClick = onToggleLyrics,
+                    painter = painterResource(R.drawable.ic_lyrics),
+                    contentDescription = if (showLyrics) {
+                        stringResource(R.string.lyrics_hide)
+                    } else {
+                        stringResource(R.string.lyrics_show)
+                    },
+                    iconSize = 22.dp,
+                    tintOverride = if (showLyrics) colors.accentText else colors.textPrimary,
+                    testTag = "toggle_lyrics_button"
+                )
+
+                AppIconButton(
+                    onClick = onOpenQueueSheet,
+                    icon = Icons.Default.QueueMusic,
+                    contentDescription = stringResource(R.string.queue_title),
+                    iconSize = 22.dp,
+                    tintOverride = colors.textPrimary,
+                    testTag = "open_queue_button"
+                )
+            }
+        }
+    ) { measurables, constraints ->
+        val looseConstraints = constraints.copy(minWidth = 0, minHeight = 0)
+        val leftPlaceable = measurables.first { it.layoutId == "left" }.measure(looseConstraints)
+        val rightPlaceable = measurables.first { it.layoutId == "right" }.measure(looseConstraints)
+
+        val maxTitleWidth = (constraints.maxWidth - leftPlaceable.width - rightPlaceable.width).coerceAtLeast(0)
+        val titlePlaceable = measurables.first { it.layoutId == "title" }.measure(
+            Constraints(maxWidth = maxTitleWidth, maxHeight = constraints.maxHeight)
+        )
+
+        val rowHeight = maxOf(leftPlaceable.height, titlePlaceable.height, rightPlaceable.height)
+        layout(constraints.maxWidth, rowHeight) {
+            leftPlaceable.placeRelative(
+                x = 0,
+                y = (rowHeight - leftPlaceable.height) / 2
+            )
+            rightPlaceable.placeRelative(
+                x = constraints.maxWidth - rightPlaceable.width,
+                y = (rowHeight - rightPlaceable.height) / 2
+            )
+            val centeredX = (constraints.maxWidth - titlePlaceable.width) / 2
+            val minX = leftPlaceable.width
+            val maxX = (constraints.maxWidth - rightPlaceable.width - titlePlaceable.width).coerceAtLeast(minX)
+            val clampedX = centeredX.coerceIn(minX, maxX)
+            titlePlaceable.placeRelative(
+                x = clampedX,
+                y = (rowHeight - titlePlaceable.height) / 2
+            )
         }
     }
 }
