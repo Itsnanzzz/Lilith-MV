@@ -60,6 +60,7 @@
 
     <!-- Equalizer -->
     <string name="equalizer_title">Audio Equalizer</string>
+    <string name="equalizer_short_label">Equalizer</string>
     <string name="equalizer_enable">Enable Equalizer</string>
     <string name="equalizer_preset">Audio Preset</string>
     <string name="equalizer_bass_boost">Bass Boost</string>
@@ -67,6 +68,7 @@
     <string name="equalizer_preamp">Preamp</string>
     <string name="equalizer_preamp_reset">Reset Preamp</string>
     <string name="equalizer_not_supported">Equalizer not supported on this device</string>
+    <string name="equalizer_unavailable">Equalizer isn\'t supported on this device</string>
     <string name="equalizer_preamp_not_supported">Preamp not supported on this device</string>
     <string name="equalizer_bass_not_supported">Bass Boost not supported on this device</string>
     <string name="equalizer_virtualizer_not_supported">Virtualizer not supported on this device</string>

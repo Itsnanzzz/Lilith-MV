@@ -767,7 +767,9 @@ fun MainAppContainer(
                 onResetPreamp = { musicViewModel.resetPreamp() },
                 onSaveCustomPreset = { musicViewModel.saveCustomPreset(it) },
                 onDeleteCustomPreset = { musicViewModel.deleteCustomPreset(it) },
-                onDismiss = { musicViewModel.setEqualizerDialogVisible(false) }
+                onDismiss = { musicViewModel.setEqualizerDialogVisible(false) },
+                hasShownUnavailableSnackbar = musicViewModel.hasShownEqualizerUnavailableNotice,
+                onUnavailableSnackbarShown = { musicViewModel.markEqualizerUnavailableNoticeShown() }
             )
         }
 

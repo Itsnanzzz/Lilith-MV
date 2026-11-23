@@ -410,7 +410,7 @@ fun NowPlayingSheet(
             // 7. Secondary Controls Row: Speed, Sleep Timer, Equalizer
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 SecondaryUtilityPill(
@@ -419,10 +419,10 @@ fun NowPlayingSheet(
                     contentDescription = stringResource(R.string.playback_speed),
                     onClick = onOpenSpeedDialog,
                     colors = colors,
-                    isActive = playbackSpeed != 1.0f
+                    isActive = playbackSpeed != 1.0f,
+                    modifier = Modifier.weight(1f),
+                    testTag = "now_playing_speed_button"
                 )
-
-                Spacer(modifier = Modifier.width(10.dp))
 
                 val timerLabel = if (sleepTimerRemainingSec > 0) {
                     "${((sleepTimerRemainingSec + 59) / 60)}m"
@@ -435,17 +435,19 @@ fun NowPlayingSheet(
                     contentDescription = stringResource(R.string.sleep_timer),
                     onClick = onOpenSleepTimerDialog,
                     colors = colors,
-                    isActive = sleepTimerRemainingSec > 0
+                    isActive = sleepTimerRemainingSec > 0,
+                    modifier = Modifier.weight(1f),
+                    testTag = "now_playing_sleep_timer_button"
                 )
-
-                Spacer(modifier = Modifier.width(10.dp))
 
                 SecondaryUtilityPill(
                     icon = Icons.Default.Equalizer,
-                    label = stringResource(R.string.equalizer_title),
+                    label = stringResource(R.string.equalizer_short_label),
                     contentDescription = stringResource(R.string.equalizer_title),
                     onClick = onOpenEqualizerDialog,
-                    colors = colors
+                    colors = colors,
+                    modifier = Modifier.weight(1f),
+                    testTag = "now_playing_equalizer_button"
                 )
             }
 
@@ -687,15 +689,20 @@ private fun SecondaryUtilityPill(
     contentDescription: String,
     onClick: () -> Unit,
     colors: AppColors,
-    isActive: Boolean = false
+    modifier: Modifier = Modifier,
+    isActive: Boolean = false,
+    testTag: String? = null
 ) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(AppTokens.RadiusPill))
+    Column(
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .clip(RoundedCornerShape(AppTokens.Radius16))
             .background(if (isActive) colors.surfaceMuted else Color.Transparent)
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .then(if (testTag != null) Modifier.testTag(testTag) else Modifier)
+            .padding(horizontal = 6.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
         Icon(
             imageVector = icon,
@@ -703,12 +710,15 @@ private fun SecondaryUtilityPill(
             tint = if (isActive) colors.accentText else colors.textSecondary,
             modifier = Modifier.size(16.dp)
         )
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = label,
             fontSize = 12.sp,
             fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Medium,
-            color = if (isActive) colors.accentText else colors.textSecondary
+            color = if (isActive) colors.accentText else colors.textSecondary,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }

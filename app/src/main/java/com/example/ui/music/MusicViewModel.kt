@@ -142,6 +142,13 @@ class MusicViewModel(
     private val equalizerController = EqualizerController.getInstance(application)
     val equalizerState: StateFlow<EqualizerState> = equalizerController.state
 
+    var hasShownEqualizerUnavailableNotice: Boolean = false
+        private set
+
+    fun markEqualizerUnavailableNoticeShown() {
+        hasShownEqualizerUnavailableNotice = true
+    }
+
     init {
         scanMediaLibrary()
     }

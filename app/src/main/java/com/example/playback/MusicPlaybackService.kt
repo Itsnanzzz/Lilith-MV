@@ -9,7 +9,9 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.widget.Toast
+import com.example.BuildConfig
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -80,8 +82,31 @@ class MusicPlaybackService : MediaSessionService() {
 
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
                 super.onAudioSessionIdChanged(audioSessionId)
-                if (audioSessionId > 0) {
+                if (BuildConfig.DEBUG) {
+                    Log.d("EqDebug", "MusicPlaybackService onAudioSessionIdChanged=$audioSessionId")
+                }
+                if (audioSessionId != C.AUDIO_SESSION_ID_UNSET && audioSessionId > 0) {
                     equalizerController.bindAudioSession(audioSessionId, player)
+                }
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                super.onIsPlayingChanged(isPlaying)
+                if (isPlaying) {
+                    val sid = player.audioSessionId
+                    if (sid != C.AUDIO_SESSION_ID_UNSET && sid > 0) {
+                        equalizerController.ensureBound(sid, player)
+                    }
+                }
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                super.onPlaybackStateChanged(playbackState)
+                if (playbackState == Player.STATE_READY) {
+                    val sid = player.audioSessionId
+                    if (sid != C.AUDIO_SESSION_ID_UNSET && sid > 0) {
+                        equalizerController.ensureBound(sid, player)
+                    }
                 }
             }
 
@@ -103,6 +128,11 @@ class MusicPlaybackService : MediaSessionService() {
                 }
             }
         })
+
+        val initialSessionId = player.audioSessionId
+        if (initialSessionId != C.AUDIO_SESSION_ID_UNSET && initialSessionId > 0) {
+            equalizerController.bindAudioSession(initialSessionId, player)
+        }
 
         val sessionActivityIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -146,6 +176,9 @@ class MusicPlaybackService : MediaSessionService() {
         serviceInstance = null
         islandOverlayController?.release()
         islandOverlayController = null
+        if (::player.isInitialized) {
+            equalizerController.detachPlayer(player)
+        }
         equalizerController.release()
         mediaSession?.run {
             player.release()

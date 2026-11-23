@@ -3,6 +3,7 @@ package com.example.ui.video
 import android.app.Application
 import android.media.AudioManager
 import android.net.Uri
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -16,8 +17,10 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import com.example.BuildConfig
 import com.example.LilithApplication
 import com.example.R
+import com.example.playback.EqualizerController
 import com.example.data.MediaRepository
 import com.example.data.SettingsDataStore
 import com.example.data.db.VideoPlaybackPositionEntity
@@ -75,6 +78,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private val database = (application as LilithApplication).database
     private val settingsDataStore = SettingsDataStore(application)
     private val audioManager = application.getSystemService(Application.AUDIO_SERVICE) as AudioManager
+    private val equalizerController = EqualizerController.getInstance(application)
 
     val trackSelector = DefaultTrackSelector(application)
     var player: ExoPlayer? = null
@@ -104,10 +108,44 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
             .setTrackSelector(trackSelector)
             .build().apply {
                 addListener(object : Player.Listener {
+                    override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                        if (BuildConfig.DEBUG) {
+                            Log.d("EqDebug", "VideoPlayerViewModel onAudioSessionIdChanged=$audioSessionId")
+                        }
+                        if (audioSessionId != C.AUDIO_SESSION_ID_UNSET && audioSessionId > 0) {
+                            equalizerController.bindAudioSession(
+                                audioSessionId = audioSessionId,
+                                player = this@apply,
+                                baseVolumeProvider = { if (_uiState.value.isMuted) 0f else 1f }
+                            )
+                        }
+                    }
+
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
                         _uiState.value = _uiState.value.copy(isPlaying = isPlaying)
                         if (isPlaying) {
+                            val sid = this@apply.audioSessionId
+                            if (sid != C.AUDIO_SESSION_ID_UNSET && sid > 0) {
+                                equalizerController.ensureBound(
+                                    audioSessionId = sid,
+                                    player = this@apply,
+                                    baseVolumeProvider = { if (_uiState.value.isMuted) 0f else 1f }
+                                )
+                            }
                             scheduleControlsAutoHide()
+                        }
+                    }
+
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (playbackState == Player.STATE_READY) {
+                            val sid = this@apply.audioSessionId
+                            if (sid != C.AUDIO_SESSION_ID_UNSET && sid > 0) {
+                                equalizerController.ensureBound(
+                                    audioSessionId = sid,
+                                    player = this@apply,
+                                    baseVolumeProvider = { if (_uiState.value.isMuted) 0f else 1f }
+                                )
+                            }
                         }
                     }
 
@@ -123,6 +161,14 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     }
                 })
             }
+        val initialSid = newPlayer.audioSessionId
+        if (initialSid != C.AUDIO_SESSION_ID_UNSET && initialSid > 0) {
+            equalizerController.bindAudioSession(
+                audioSessionId = initialSid,
+                player = newPlayer,
+                baseVolumeProvider = { if (_uiState.value.isMuted) 0f else 1f }
+            )
+        }
         player = newPlayer
         startProgressLoop()
         return newPlayer
@@ -350,7 +396,8 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun toggleMute() {
         val newMute = !_uiState.value.isMuted
-        player?.volume = if (newMute) 0f else 1f
+        val eqMult = equalizerController.getPreampVolumeMultiplier()
+        player?.volume = if (newMute) 0f else eqMult
         _uiState.value = _uiState.value.copy(isMuted = newMute)
     }
 
@@ -515,7 +562,10 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
         progressJob?.cancel()
         autoHideJob?.cancel()
         gestureFeedbackJob?.cancel()
-        player?.release()
+        player?.let { p ->
+            equalizerController.detachPlayer(p)
+            p.release()
+        }
         player = null
         _uiState.value = VideoPlayerUiState()
     }

@@ -47,10 +47,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -80,6 +85,7 @@ import com.example.ui.theme.AppIconButton
 import com.example.ui.theme.AppSlider
 import com.example.ui.theme.AppSwitch
 import com.example.ui.theme.AppThemeTokens
+import com.example.ui.theme.AppTokens
 import com.example.ui.theme.AppTypography
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -100,10 +106,28 @@ fun AudioEqualizerSheet(
     onResetPreamp: () -> Unit,
     onSaveCustomPreset: (String) -> Unit,
     onDeleteCustomPreset: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    hasShownUnavailableSnackbar: Boolean = false,
+    onUnavailableSnackbarShown: () -> Unit = {}
 ) {
     val colors = AppThemeTokens.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val snackbarHostState = remember { SnackbarHostState() }
+    val unavailableMessage = stringResource(R.string.equalizer_unavailable)
+    val hasAnyEffectSupported = state.isAvailable ||
+        state.isBassBoostSupported ||
+        state.isVirtualizerSupported ||
+        state.isPreampSupported
+
+    LaunchedEffect(state.isAvailable, hasShownUnavailableSnackbar) {
+        if (!state.isAvailable && !hasShownUnavailableSnackbar) {
+            onUnavailableSnackbarShown()
+            snackbarHostState.showSnackbar(
+                message = unavailableMessage,
+                duration = SnackbarDuration.Short
+            )
+        }
+    }
 
     var showSavePresetDialog by remember { mutableStateOf(false) }
     var presetNameToSave by remember { mutableStateOf("") }
@@ -125,13 +149,14 @@ fun AudioEqualizerSheet(
         },
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.92f)
-                .padding(horizontal = 20.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.92f)
+                    .padding(horizontal = 20.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
             // Header: Icon, Title, Master Toggle, Close
             Row(
                 modifier = Modifier
@@ -166,13 +191,13 @@ fun AudioEqualizerSheet(
                             color = colors.textPrimary
                         )
                         Text(
-                            text = if (state.isEnabled) {
-                                state.activePreset
-                            } else {
-                                stringResource(R.string.equalizer_bypassed)
+                            text = when {
+                                !state.isAvailable -> unavailableMessage
+                                state.isEnabled -> state.activePreset
+                                else -> stringResource(R.string.equalizer_bypassed)
                             },
                             style = AppTypography.caption,
-                            color = if (state.isEnabled) colors.accentText else colors.textSecondary
+                            color = if (state.isAvailable && state.isEnabled) colors.accentText else colors.textSecondary
                         )
                     }
                 }
@@ -181,6 +206,7 @@ fun AudioEqualizerSheet(
                     AppSwitch(
                         checked = state.isEnabled,
                         onCheckedChange = onToggleEnabled,
+                        enabled = hasAnyEffectSupported,
                         modifier = Modifier.testTag("equalizer_master_switch")
                     )
                     Spacer(modifier = Modifier.width(12.dp))
@@ -207,7 +233,7 @@ fun AudioEqualizerSheet(
                     style = AppTypography.label.copy(fontWeight = FontWeight.SemiBold),
                     color = colors.textSecondary
                 )
-                if (state.activePreset == PRESET_CUSTOM) {
+                if (state.isAvailable && state.activePreset == PRESET_CUSTOM) {
                     TextButton(
                         onClick = {
                             presetNameToSave = ""
@@ -246,7 +272,7 @@ fun AudioEqualizerSheet(
                             text = presetName,
                             selected = isSelected,
                             onClick = {
-                                if (state.isEnabled) {
+                                if (state.isAvailable && state.isEnabled) {
                                     onSelectPreset(presetName)
                                 }
                             }
@@ -284,6 +310,7 @@ fun AudioEqualizerSheet(
                     .border(1.dp, colors.hairline, RoundedCornerShape(16.dp))
                     .padding(16.dp)
             ) {
+                val isGraphicEqEnabled = state.isAvailable && state.isEnabled
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -307,22 +334,31 @@ fun AudioEqualizerSheet(
 
                         TextButton(
                             onClick = onResetBands,
-                            enabled = state.isEnabled,
+                            enabled = isGraphicEqEnabled,
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Refresh,
                                 contentDescription = null,
-                                tint = if (state.isEnabled) colors.accent else colors.disabled,
+                                tint = if (isGraphicEqEnabled) colors.accent else colors.disabled,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = stringResource(R.string.reset),
                                 style = AppTypography.caption.copy(fontWeight = FontWeight.SemiBold),
-                                color = if (state.isEnabled) colors.accentText else colors.disabled
+                                color = if (isGraphicEqEnabled) colors.accentText else colors.disabled
                             )
                         }
+                    }
+
+                    if (!state.isAvailable) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = unavailableMessage,
+                            style = AppTypography.caption,
+                            color = colors.textSecondary
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -364,7 +400,7 @@ fun AudioEqualizerSheet(
                                 state.bands.forEach { band ->
                                     VerticalBandSlider(
                                         band = band,
-                                        enabled = state.isEnabled,
+                                        enabled = isGraphicEqEnabled,
                                         accentColor = colors.accent,
                                         textColor = colors.textPrimary,
                                         secondaryColor = colors.textSecondary,
@@ -434,6 +470,23 @@ fun AudioEqualizerSheet(
             )
 
             Spacer(modifier = Modifier.height(32.dp))
+        }
+
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                snackbar = { data ->
+                    Snackbar(
+                        snackbarData = data,
+                        shape = RoundedCornerShape(AppTokens.Radius12),
+                        containerColor = colors.accent,
+                        contentColor = colors.onAccent,
+                        actionColor = colors.onAccent
+                    )
+                }
+            )
         }
     }
 
