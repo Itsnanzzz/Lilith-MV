@@ -75,19 +75,7 @@ class MusicPlaybackService : MediaSessionService() {
         player.addListener(object : Player.Listener {
             override fun onTracksChanged(tracks: Tracks) {
                 super.onTracksChanged(tracks)
-                var detectedFormat: AudioFormatInfo? = null
-                for (trackGroup in tracks.groups) {
-                    if (trackGroup.type == C.TRACK_TYPE_AUDIO && trackGroup.isSelected) {
-                        for (i in 0 until trackGroup.length) {
-                            if (trackGroup.isTrackSelected(i)) {
-                                val format = trackGroup.getTrackFormat(i)
-                                detectedFormat = AudioFormatDetector.detectFromFormat(format)
-                                break
-                            }
-                        }
-                    }
-                }
-                currentFormatInfo = detectedFormat ?: AudioFormatInfo()
+                currentFormatInfo = AudioFormatDetector.detectFromTracks(tracks) ?: AudioFormatInfo()
             }
 
             override fun onAudioSessionIdChanged(audioSessionId: Int) {

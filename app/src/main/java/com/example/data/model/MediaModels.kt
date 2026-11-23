@@ -3,6 +3,7 @@ package com.example.data.model
 import android.net.Uri
 import android.os.Build
 import java.io.File
+import java.util.Locale
 
 data class AudioTrack(
     val id: Long,
@@ -126,18 +127,62 @@ data class AudioFormatInfo(
     val bitDepth: Int = 0,
     val channelCount: Int = 2
 ) {
+    fun hasValidCodec(): Boolean {
+        val normalized = codec.trim()
+        return normalized.isNotEmpty() &&
+            !normalized.equals("UNKNOWN", ignoreCase = true) &&
+            !normalized.equals("AUDIO", ignoreCase = true) &&
+            !normalized.equals("NONE", ignoreCase = true) &&
+            !normalized.equals("NULL", ignoreCase = true) &&
+            !normalized.equals("N/A", ignoreCase = true) &&
+            normalized != "0" &&
+            normalized.any { it.isLetter() }
+    }
+
     fun getBadgeLabel(): String = if (isLossless) "LOSSLESS" else "LOSSY"
 
     fun getDetailsSummary(): String {
         val parts = mutableListOf<String>()
-        if (codec.isNotEmpty() && codec != "UNKNOWN") parts.add(codec)
+        if (hasValidCodec()) parts.add(codec.trim())
         if (bitDepth > 0) parts.add("${bitDepth}-bit")
         if (sampleRateHz > 0) {
             val khz = sampleRateHz / 1000.0
-            parts.add(if (khz % 1.0 == 0.0) "${khz.toInt()} kHz" else "%.1f kHz".format(khz))
+            parts.add(
+                if (khz % 1.0 == 0.0) {
+                    "${khz.toInt()} kHz"
+                } else {
+                    String.format(Locale.US, "%.1f kHz", khz)
+                }
+            )
         }
         if (bitrateKbps > 0) parts.add("$bitrateKbps kbps")
         return parts.joinToString(" • ")
+    }
+
+    fun getDisplayText(showDetails: Boolean): String? {
+        if (showDetails) {
+            val details = getDetailsSummary()
+            if (details.isNotEmpty()) return details
+            return if (isLossless) getBadgeLabel() else null
+        }
+        val hasInfo = hasValidCodec() ||
+            bitDepth > 0 ||
+            sampleRateHz > 0 ||
+            bitrateKbps > 0 ||
+            isLossless
+        return if (hasInfo) getBadgeLabel() else null
+    }
+
+    fun mergeWithFallback(fallback: AudioFormatInfo): AudioFormatInfo {
+        val usePrimaryCodec = hasValidCodec()
+        return AudioFormatInfo(
+            codec = if (usePrimaryCodec) codec else fallback.codec,
+            isLossless = if (usePrimaryCodec) isLossless else (isLossless || fallback.isLossless),
+            bitrateKbps = if (bitrateKbps > 0) bitrateKbps else fallback.bitrateKbps,
+            sampleRateHz = if (sampleRateHz > 0) sampleRateHz else fallback.sampleRateHz,
+            bitDepth = if (bitDepth > 0) bitDepth else fallback.bitDepth,
+            channelCount = if (channelCount > 0) channelCount else fallback.channelCount
+        )
     }
 }
 

@@ -4,10 +4,12 @@ import android.content.ComponentName
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
+import android.util.LruCache
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -63,6 +65,17 @@ class MusicPlayerManager(private val context: Context) {
 
     private val _formatInfo = MutableStateFlow(AudioFormatInfo())
     val formatInfo: StateFlow<AudioFormatInfo> = _formatInfo.asStateFlow()
+
+    private data class FormatCacheKey(
+        val songId: Long,
+        val fileSize: Long,
+        val uri: String
+    )
+
+    private val formatCache = LruCache<FormatCacheKey, AudioFormatInfo>(30)
+    private var formatResolveJob: Job? = null
+    private var activeFormatUri: String? = null
+    private var liveTracksFormatUri: String? = null
 
     private val _sleepTimerRemainingSeconds = MutableStateFlow(0)
     val sleepTimerRemainingSeconds: StateFlow<Int> = _sleepTimerRemainingSeconds.asStateFlow()
@@ -135,6 +148,7 @@ class MusicPlayerManager(private val context: Context) {
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 super.onMediaItemTransition(mediaItem, reason)
+                liveTracksFormatUri = null
                 updateCurrentTrackFromMediaItem(mediaItem)
                 saveSessionNow()
             }
@@ -149,6 +163,11 @@ class MusicPlayerManager(private val context: Context) {
                 saveSessionNow()
             }
 
+            override fun onTracksChanged(tracks: Tracks) {
+                super.onTracksChanged(tracks)
+                applyLiveTracksFormat(tracks)
+            }
+
             override fun onPlaybackParametersChanged(playbackParameters: androidx.media3.common.PlaybackParameters) {
                 _playbackSpeed.value = playbackParameters.speed
             }
@@ -157,7 +176,8 @@ class MusicPlayerManager(private val context: Context) {
         _isPlaying.value = controller.isPlaying
         _repeatMode.value = controller.repeatMode
         _shuffleEnabled.value = controller.shuffleModeEnabled
-        updateCurrentTrackFromMediaItem(controller.currentMediaItem)
+        updateCurrentTrackFromMediaItem(controller.currentMediaItem, allowLiveTracksLookup = true)
+        applyLiveTracksFormat(controller.currentTracks)
     }
 
     private fun applyRestoredSessionToController(
@@ -301,7 +321,7 @@ class MusicPlayerManager(private val context: Context) {
         _isPlaying.value = false
         _repeatMode.value = snapshot.repeatMode
         _shuffleEnabled.value = snapshot.shuffleEnabled
-        _formatInfo.value = AudioFormatDetector.detectFromMime(targetTrack.mimeType)
+        resolveFormatForCurrentTrack(targetTrack)
 
         val controller = mediaController
         if (controller != null) {
@@ -311,10 +331,10 @@ class MusicPlayerManager(private val context: Context) {
         }
     }
 
-    private fun updateCurrentTrackFromMediaItem(item: MediaItem?) {
+    private fun updateCurrentTrackFromMediaItem(item: MediaItem?, allowLiveTracksLookup: Boolean = false) {
         val currentMediaId = item?.mediaId ?: return
         val matched = _queue.value.find { it.uri == currentMediaId || it.id.toString() == currentMediaId }
-        _currentTrack.value = matched ?: item.let {
+        val resolvedTrack = matched ?: item.let {
             val meta = it.mediaMetadata
             AudioTrack(
                 id = currentMediaId.hashCode().toLong(),
@@ -326,12 +346,102 @@ class MusicPlayerManager(private val context: Context) {
                 albumArtUri = meta.artworkUri?.toString()
             )
         }
+        _currentTrack.value = resolvedTrack
+        resolveFormatForCurrentTrack(resolvedTrack, allowLiveTracksLookup = allowLiveTracksLookup)
+    }
 
-        // Fetch format from service if bound
-        MusicPlaybackService.serviceInstance?.let { service ->
-            _formatInfo.value = service.currentFormatInfo
-        } ?: run {
-            _formatInfo.value = AudioFormatDetector.detectFromMime(_currentTrack.value?.mimeType)
+    private fun hasAllFormatDetails(info: AudioFormatInfo): Boolean {
+        if (!info.hasValidCodec() || info.sampleRateHz <= 0) return false
+        return if (info.isLossless) info.bitDepth > 0 else info.bitrateKbps > 0
+    }
+
+    private fun applyLiveTracksFormat(tracks: Tracks) {
+        val currentTrack = _currentTrack.value ?: return
+        val controllerMediaId = mediaController?.currentMediaItem?.mediaId
+        if (controllerMediaId != null && controllerMediaId != currentTrack.uri) return
+
+        val liveFormat = AudioFormatDetector.detectFromTracks(tracks, currentTrack.mimeType) ?: return
+        if (liveFormat.getDisplayText(showDetails = true) != null) {
+            val cacheKey = FormatCacheKey(songId = currentTrack.id, fileSize = currentTrack.size, uri = currentTrack.uri)
+            val cachedFileFormat = synchronized(formatCache) { formatCache.get(cacheKey) }
+            val fallback = if (activeFormatUri == currentTrack.uri) {
+                _formatInfo.value.mergeWithFallback(cachedFileFormat ?: AudioFormatInfo())
+            } else {
+                cachedFileFormat ?: AudioFormatInfo()
+            }
+            val merged = liveFormat.mergeWithFallback(fallback)
+
+            liveTracksFormatUri = currentTrack.uri
+            activeFormatUri = currentTrack.uri
+            if (hasAllFormatDetails(merged) || cachedFileFormat != null) {
+                formatResolveJob?.cancel()
+            }
+            _formatInfo.value = merged
+        }
+    }
+
+    private fun resolveFormatForCurrentTrack(track: AudioTrack?, allowLiveTracksLookup: Boolean = false) {
+        if (track == null) {
+            formatResolveJob?.cancel()
+            activeFormatUri = null
+            liveTracksFormatUri = null
+            _formatInfo.value = AudioFormatInfo()
+            return
+        }
+
+        val cacheKey = FormatCacheKey(songId = track.id, fileSize = track.size, uri = track.uri)
+        val cached = synchronized(formatCache) { formatCache.get(cacheKey) }
+
+        if (allowLiveTracksLookup) {
+            val controller = mediaController
+            val isControllerOnTrack = controller?.currentMediaItem?.mediaId == track.uri
+            if (isControllerOnTrack) {
+                val liveFromController = controller?.currentTracks?.let {
+                    AudioFormatDetector.detectFromTracks(it, track.mimeType)
+                }
+                if (liveFromController != null && liveFromController.getDisplayText(showDetails = true) != null) {
+                    val merged = if (cached != null) liveFromController.mergeWithFallback(cached) else liveFromController
+                    activeFormatUri = track.uri
+                    liveTracksFormatUri = track.uri
+                    _formatInfo.value = merged
+                    if (hasAllFormatDetails(merged) || cached != null) {
+                        formatResolveJob?.cancel()
+                        return
+                    }
+                }
+            }
+        }
+
+        if (activeFormatUri == track.uri &&
+            (liveTracksFormatUri == track.uri ||
+                formatResolveJob?.isActive == true ||
+                _formatInfo.value.getDisplayText(showDetails = true) != null)
+        ) {
+            return
+        }
+
+        formatResolveJob?.cancel()
+        activeFormatUri = track.uri
+        liveTracksFormatUri = null
+
+        if (cached != null) {
+            _formatInfo.value = cached
+            return
+        }
+
+        _formatInfo.value = AudioFormatInfo()
+        formatResolveJob = scope.launch {
+            val resolved = AudioFormatDetector.detectFromFile(context, track)
+            synchronized(formatCache) {
+                formatCache.put(cacheKey, resolved)
+            }
+            if (_currentTrack.value?.uri == track.uri) {
+                _formatInfo.value = if (liveTracksFormatUri == track.uri) {
+                    _formatInfo.value.mergeWithFallback(resolved)
+                } else {
+                    resolved
+                }
+            }
         }
     }
 
@@ -343,10 +453,8 @@ class MusicPlayerManager(private val context: Context) {
                     if (controller.isPlaying) {
                         _currentPositionMs.value = controller.currentPosition.coerceAtLeast(0L)
                         _durationMs.value = controller.duration.coerceAtLeast(0L)
-                        MusicPlaybackService.serviceInstance?.let { service ->
-                            if (_formatInfo.value != service.currentFormatInfo && service.currentFormatInfo.codec != "UNKNOWN") {
-                                _formatInfo.value = service.currentFormatInfo
-                            }
+                        if (liveTracksFormatUri != _currentTrack.value?.uri) {
+                            applyLiveTracksFormat(controller.currentTracks)
                         }
 
                         // Debounced periodic save (~5s) while playing, skipping if position hasn't changed
@@ -367,8 +475,9 @@ class MusicPlayerManager(private val context: Context) {
         if (tracks.isEmpty()) return
 
         _queue.value = tracks
-        _currentTrack.value = tracks.getOrNull(startIndex)
-        _formatInfo.value = AudioFormatDetector.detectFromMime(_currentTrack.value?.mimeType)
+        val selectedTrack = tracks.getOrNull(startIndex)
+        _currentTrack.value = selectedTrack
+        resolveFormatForCurrentTrack(selectedTrack)
 
         val controller = mediaController
         if (controller == null) {
@@ -432,6 +541,9 @@ class MusicPlayerManager(private val context: Context) {
 
         if (_currentTrack.value?.uri == oldUri) {
             _currentTrack.value = updatedTrack
+            if (oldUri != updatedTrack.uri) {
+                resolveFormatForCurrentTrack(updatedTrack)
+            }
         }
 
         val controller = mediaController
@@ -491,6 +603,7 @@ class MusicPlayerManager(private val context: Context) {
                 val nextTrack = currentQueue[nextIndex]
                 controller?.seekTo(nextIndex, 0L)
                 _currentTrack.value = nextTrack
+                resolveFormatForCurrentTrack(nextTrack)
                 controller?.removeMediaItem(index)
                 currentQueue.removeAt(index)
                 _queue.value = currentQueue
@@ -500,6 +613,7 @@ class MusicPlayerManager(private val context: Context) {
                 controller?.clearMediaItems()
                 _queue.value = emptyList()
                 _currentTrack.value = null
+                resolveFormatForCurrentTrack(null)
                 _isPlaying.value = false
                 _currentPositionMs.value = 0L
                 _durationMs.value = 0L
@@ -529,6 +643,7 @@ class MusicPlayerManager(private val context: Context) {
         controller.clearMediaItems()
         _queue.value = emptyList()
         _currentTrack.value = null
+        resolveFormatForCurrentTrack(null)
         clearSavedSession()
     }
 
@@ -614,6 +729,7 @@ class MusicPlayerManager(private val context: Context) {
     }
 
     fun release() {
+        formatResolveJob?.cancel()
         progressPollingJob?.cancel()
         sleepTimerJob?.cancel()
         controllerFuture?.let {

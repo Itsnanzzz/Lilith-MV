@@ -3,9 +3,11 @@ package com.example.ui.music
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.MarqueeAnimationMode
 import androidx.compose.foundation.MarqueeSpacing
 import androidx.compose.foundation.background
@@ -24,6 +26,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -150,7 +153,7 @@ fun NowPlayingSheet(
     var isDraggingSlider by remember { mutableStateOf(false) }
     var dragPositionMs by remember { mutableFloatStateOf(currentPositionMs.toFloat()) }
     var showLyrics by rememberSaveable { mutableStateOf(false) }
-    var syncOffsetMs by rememberSaveable(track.id) { mutableLongStateOf(0L) }
+    var syncOffsetMs by rememberSaveable(track.id) { mutableLongStateOf(LYRICS_DEFAULT_OFFSET_MS) }
     var showSyncOffsetDialog by rememberSaveable(track.id) { mutableStateOf(false) }
 
     val fallbackPositionFlow = remember(currentPositionMs) { MutableStateFlow(currentPositionMs) }
@@ -268,11 +271,31 @@ fun NowPlayingSheet(
             Spacer(modifier = Modifier.height(spacingMedium))
 
             // 4. Format Info Badge (FLAC / AAC / MP3, Lossless / Lossy, Sample Rate)
-            MediaFormatBadge(
-                formatInfo = formatInfo,
-                showDetails = true,
-                modifier = Modifier.padding(horizontal = 8.dp)
-            )
+            val formatBadgeLabel = formatInfo.getDisplayText(showDetails = true)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = formatBadgeLabel != null,
+                    enter = fadeIn(
+                        animationSpec = if (isAnimationDisabled) {
+                            snap()
+                        } else {
+                            tween(durationMillis = AppTokens.AnimDurationShort)
+                        }
+                    ),
+                    exit = ExitTransition.None
+                ) {
+                    MediaFormatBadge(
+                        formatInfo = formatInfo,
+                        showDetails = true,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(spacingLarge))
 

@@ -264,12 +264,14 @@ fun FloatingBottomBar(
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        MediaFormatBadge(
-                                            formatInfo = formatInfo,
-                                            surfaceOverride = colors.miniPlayerSurface,
-                                            textColorOverride = colors.miniPlayerTextSecondary
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
+                                        if (formatInfo.getDisplayText(showDetails = false) != null) {
+                                            MediaFormatBadge(
+                                                formatInfo = formatInfo,
+                                                surfaceOverride = colors.miniPlayerSurface,
+                                                textColorOverride = colors.miniPlayerTextSecondary
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                        }
                                         Text(
                                             text = currentTrack.artist,
                                             fontSize = 12.sp,

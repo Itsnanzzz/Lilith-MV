@@ -241,7 +241,7 @@ fun MediaFormatBadge(
 ) {
     val colors = AppThemeTokens.colors
     val isLossless = formatInfo.isLossless
-    val label = if (showDetails) formatInfo.getDetailsSummary() else formatInfo.getBadgeLabel()
+    val label = formatInfo.getDisplayText(showDetails) ?: return
 
     Box(
         modifier = modifier

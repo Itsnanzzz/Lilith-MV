@@ -122,6 +122,8 @@ private const val LINE_TRANSITION_STAGGER_STEP_MS = 40
 private const val LINE_TRANSITION_MAX_STAGGER_STEPS = 3
 private const val LINE_SCALE_ACTIVE = 1.0f
 private const val LINE_SCALE_INACTIVE = 0.94f
+// Positive = lyrics appear earlier
+internal const val LYRICS_DEFAULT_OFFSET_MS = 500L
 
 private val ActiveLyricTextStyle = TextStyle(
     fontFamily = LyricsFontFamily,
@@ -439,7 +441,7 @@ private fun SyncedLyricsList(
     val listState = rememberLazyListState()
 
     val activeIndexState = remember(trackId, lines) {
-        val initialEffectivePos = (positionFlow.value + syncOffsetMs).coerceAtLeast(0L)
+        val initialEffectivePos = applyLyricsOffset(positionFlow.value, syncOffsetMs)
         mutableIntStateOf(LyricsParser.findActiveLineIndex(lines, initialEffectivePos))
     }
     val transitionDurationState = remember(trackId, lines) {
@@ -452,7 +454,9 @@ private fun SyncedLyricsList(
         )
     }
 
-    var lastPositionMs by remember(trackId) { mutableLongStateOf(positionFlow.value) }
+    var lastEffectivePositionMs by remember(trackId) {
+        mutableLongStateOf(applyLyricsOffset(positionFlow.value, syncOffsetMs))
+    }
     var pendingTapSeek by remember(trackId) { mutableStateOf(false) }
     val pendingIsSeekState = remember(trackId) { mutableStateOf(false) }
 
@@ -462,16 +466,16 @@ private fun SyncedLyricsList(
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             positionFlow.collect { pos ->
                 // Positive syncOffsetMs brings lyrics earlier, matching LRC [offset:+ms].
-                val effectivePos = (pos + syncOffsetMs).coerceAtLeast(0L)
+                val effectivePos = applyLyricsOffset(pos, syncOffsetMs)
                 val newIndex = LyricsParser.findActiveLineIndex(lines, effectivePos)
                 val prevIndex = activeIndexState.intValue
-                val isTimeJump = pos < lastPositionMs - 100L ||
-                    (pos - lastPositionMs) > AUTO_SCROLL_SEEK_JUMP_THRESHOLD_MS
+                val isTimeJump = effectivePos < lastEffectivePositionMs - 100L ||
+                    (effectivePos - lastEffectivePositionMs) > AUTO_SCROLL_SEEK_JUMP_THRESHOLD_MS
                 val isIndexJump = prevIndex >= 0 && newIndex >= 0 && abs(newIndex - prevIndex) > 1
                 val isSeek = pendingTapSeek || isTimeJump || isIndexJump
 
                 pendingTapSeek = false
-                lastPositionMs = pos
+                lastEffectivePositionMs = effectivePos
 
                 if (newIndex != prevIndex) {
                     pendingIsSeekState.value = isSeek
@@ -549,10 +553,10 @@ private fun SyncedLyricsList(
         isAnimationDisabled = isAnimationDisabled
     )
 
-    val onSeekLineClick = remember(onSeek) {
+    val onSeekLineClick = remember(onSeek, syncOffsetMs) {
         { timeMs: Long ->
             pendingTapSeek = true
-            onSeek(timeMs)
+            onSeek(calculateLyricTapSeekPositionMs(timeMs, syncOffsetMs))
         }
     }
 
@@ -799,6 +803,14 @@ private fun resolveLyricLineColor(
     }
 }
 
+internal fun applyLyricsOffset(positionMs: Long, syncOffsetMs: Long): Long {
+    return (positionMs + syncOffsetMs).coerceAtLeast(0L)
+}
+
+internal fun calculateLyricTapSeekPositionMs(lineTimeMs: Long, syncOffsetMs: Long): Long {
+    return (lineTimeMs - syncOffsetMs).coerceAtLeast(0L)
+}
+
 private fun computeAdaptiveScrollDurationMs(
     lines: List<LyricLine>,
     activeIndex: Int
@@ -1012,7 +1024,7 @@ fun SyncOffsetDialog(
             )
         },
         dismissButton = {
-            val canReset = syncOffsetMs != 0L
+            val canReset = syncOffsetMs != LYRICS_DEFAULT_OFFSET_MS
             Box(
                 modifier = Modifier
                     .heightIn(min = 48.dp)
@@ -1022,7 +1034,7 @@ fun SyncOffsetDialog(
                         if (canReset) {
                             Modifier.clickable(
                                 role = Role.Button,
-                                onClick = { onOffsetChange(0L) }
+                                onClick = { onOffsetChange(LYRICS_DEFAULT_OFFSET_MS) }
                             )
                         } else Modifier
                     )
